@@ -268,7 +268,7 @@
   width: 100%;
   max-width: 460px;
   aspect-ratio: 900 / 197;
-  margin: -14px auto -10px;
+  margin: -8px auto -10px;
 }
 .er-hpch,
 .er-hpbar .er-num {
@@ -803,8 +803,9 @@
 }
 .er-party {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(4, minmax(0, 70px));
+  justify-content: center;
+  gap: 10px;
 }
 /* hero cards on the antique gold card frame (2026-11-25): portrait in the window, rune in the seal, power in the
    plate, charge in the thin bar. Positions are fractions of the frame art (844 x 1295). */
@@ -840,8 +841,8 @@
   right: 0;
   bottom: 18.6%;
   font-family: var(--display);
-  font-size: 14px;
-  letter-spacing: 0.04em;
+  font-size: 12px;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
   text-align: center;
   line-height: 1;
@@ -860,7 +861,7 @@
   place-items: center;
   border-radius: 999px;
   background: color-mix(in srgb, var(--hc2) 70%, transparent);
-  font-size: 9.5px;
+  font-size: 8px;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
@@ -904,7 +905,7 @@
   top: 3.6%;
   left: 9%;
   font-family: var(--display);
-  font-size: 13px;
+  font-size: 11px;
   text-shadow:
     0 1px 0 #000,
     0 1px 4px #000;
@@ -1451,8 +1452,8 @@
     display: none;
   }
   .er-hpbar {
-    max-width: 300px;
-    margin: -10px auto -9px;
+    max-width: 320px;
+    margin: -8px auto -9px;
   }
   .er-bossbar .er-vexa-cd {
     min-width: 26px;
@@ -1460,14 +1461,12 @@
     font-size: 15px;
   }
   .er-party {
-    grid-template-columns: repeat(4, minmax(0, 72px));
-    justify-content: center;
-    gap: 8px;
+    grid-template-columns: repeat(4, minmax(0, 60px));
   }
   .er-hc .er-nm {
-    font-size: 12px;
+    font-size: 10px;
   }
   .er-hc .er-pw {
-    font-size: 8.5px;
+    font-size: 7px;
   }
 }

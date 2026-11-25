@@ -78,6 +78,8 @@ export interface ControllerOptions {
   intro: boolean;
   introTitle: string;
   introSub: string;
+  /** No sound (the host's own sound setting). */
+  muted?: boolean;
   /** The test buttons: charge the whole party, restart. */
   devTools: boolean;
   allowRetry: boolean;
@@ -231,12 +233,10 @@ function markup(o: ControllerOptions) {
     ${figure}
     <div class="er-shade"></div>
     <div class="er-bossbar${o.devTools ? '' : ' er-few-tools'}">
-      <div class="er-row er-name-row"><span class="er-name">${E}</span><span class="er-chip er-warded">Warded</span><span class="er-chip er-enraged" hidden>Enraged</span><span class="er-chip er-burn er-vexa-burn" hidden></span></div>
-      <div class="er-flourish"><i></i></div>
       <div class="er-hpbar er-vexa-bar" role="meter" aria-label="${E}'s health"><div class="er-hpch"><b></b><i style="background-image:url('${hpFillImg}')"></i></div><img class="er-hpfr" src="${hpFrameImg}" alt=""><span class="er-num"></span></div>
-      <div class="er-row er-intent-row"><span class="er-cd er-vexa-cd">3</span><span class="er-intent"></span></div>
+      <div class="er-row er-intent-row"><span class="er-cd er-vexa-cd">3</span><span class="er-intent"></span><span class="er-chip er-warded">Warded</span><span class="er-chip er-enraged" hidden>Enraged</span><span class="er-chip er-burn er-vexa-burn" hidden></span></div>
     </div>
-    <div class="er-tools">${o.devTools ? '<button class="er-charge-btn" aria-label="Charge the whole party (test)" title="Charge the party (test)">⚡</button>' : ''}<button class="er-mute-btn" aria-label="Sound on or off">♪</button>${o.devTools ? '<button class="er-restart-btn" aria-label="Restart fight">↻</button>' : ''}</div>
+    ${o.devTools ? '<div class="er-tools"><button class="er-charge-btn" aria-label="Charge the whole party (test)" title="Charge the party (test)">⚡</button><button class="er-restart-btn" aria-label="Restart fight">↻</button></div>' : ''}
     <div class="er-lockhint">Tap a ward or ${E} to aim every rune at it</div>
     <div class="er-lanes">
       <div class="er-vexa-mark" aria-label="Aim at ${E}"><div class="er-reticle"></div></div>
@@ -315,12 +315,12 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     right: $('.er-pod[data-foe=right]'),
     vexa: $('.er-vexa-mark'),
   };
+  const muted = !!o.muted;
   let S!: State;
   let grid: (Tile | null)[][] = [];
   let s = 56,
     uid = 0,
     sel: number | null = null,
-    muted = false,
     dead = false;
 
   /* ---------- timers that stop with the fight ---------- */
@@ -2332,11 +2332,6 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     if (S.over) return;
     HEROES.forEach((h) => (S.charge[h.id] = 100));
     render();
-  });
-  const muteBtn = $('.er-mute-btn');
-  muteBtn.addEventListener('click', () => {
-    muted = !muted;
-    muteBtn.style.opacity = muted ? '0.4' : '1';
   });
   root.querySelector('.er-restart-btn')?.addEventListener('click', () => {
     if (!S.busy) start();

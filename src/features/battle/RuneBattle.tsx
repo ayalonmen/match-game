@@ -44,6 +44,8 @@ export interface RuneBattleProps {
   mustWin?: boolean;
   /** The test buttons (charge the party, restart). */
   devTools?: boolean;
+  /** No sound (follow the host's own sound setting). */
+  muted?: boolean;
   /** When the fight ends, before the end card. */
   onEnd?: (r: BattleResult) => void;
   /** The end card's Continue button; without it the card offers Fight again. */
@@ -95,7 +97,7 @@ export function RuneBattle(props: RuneBattleProps) {
     enemyTitle = 'Demon of the Den',
     introPace,
   } = props;
-  const { introTitle = 'Ember Runes', introSub, allowRetry = false, mustWin = false, devTools = false } = props;
+  const { introTitle = 'Ember Runes', introSub, allowRetry = false, mustWin = false, devTools = false, muted = false } = props;
   const hasContinue = !!props.onContinue;
   const setup = JSON.stringify({
     enemyName,
@@ -119,6 +121,7 @@ export function RuneBattle(props: RuneBattleProps) {
     allowRetry,
     mustWin,
     devTools,
+    muted,
     hasContinue,
   });
 
@@ -144,6 +147,7 @@ export function RuneBattle(props: RuneBattleProps) {
       introTitle: s.introTitle!,
       introSub: s.introSub ?? `Fight ${s.enemyName}`,
       devTools: !!s.devTools,
+      muted: !!s.muted,
       allowRetry: !!s.allowRetry,
       mustWin: !!s.mustWin,
       hasContinue: s.hasContinue,

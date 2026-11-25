@@ -39,11 +39,13 @@ approved the prototype ("lock this"). The prototype is `docs/reference/ember-run
 
 Ayalon's Water Hag layout (`docs/reference/design/water-hag-layout.png`) with his antique gold art in
 `src/features/battle/assets/ui/`:
-- Her name in large caps over a gold rule with a diamond, then her health in Ember Wheels' ornate frame (the
-  textured red fill is clipped, not squeezed), then the countdown seal and her next move.
+- No name row and no buttons on the stage (Ayalon, to give the figure room; the enemy card shows her name). At the
+  top: her health in Ember Wheels' ornate frame (the textured red fill is clipped, not squeezed), then the countdown
+  seal, her next move and the Warded / Enraged / Burning chips. The test buttons show only with devTools; sound
+  follows the host's `muted`.
 - The board sits in the gold board frame; its 7x6 cells line up with the tiles (`layout()` places the frame from the
   art's measured grid).
-- Hero cards use the card frame: portrait in the window, charging rune in the seal, name, the power in a plate tinted
+- Hero cards (70px wide, 60px on short phones) use the card frame: portrait in the window, charging rune in the seal, name, the power in a plate tinted
   with the hero's colour, the charge in the thin bar. The party's health uses the thin gold bar frame.
 - Short phones (under 740px tall) get a tighter header and narrower cards.
 
