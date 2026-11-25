@@ -34,6 +34,12 @@ import wardImg from './assets/ward.webp';
 import vialImg from './assets/vial.webp';
 import rubyImg from './assets/ruby.webp';
 import skullImg from './assets/skull.webp';
+import hpFrameImg from './assets/ui/hp-frame.webp';
+import hpFillImg from './assets/ui/hp-fill.webp';
+import barFrameImg from './assets/ui/bar-frame.webp';
+import boardFrameImg from './assets/ui/board-frame.webp';
+import cardFrameImg from './assets/ui/card-frame.webp';
+import cardOrbImg from './assets/ui/card-orb.webp';
 
 const IMG: Record<Rune | 'skull', string> = {
   blade: bladeImg,
@@ -59,6 +65,14 @@ export interface ControllerOptions {
   heroes: HeroDef[];
   enemyName: string;
   enemyImage: string;
+  /** A cutout of the whole enemy: she stands on the stage in place of the painting, scaled to fit. */
+  enemyFigure?: string;
+  /** The same cutout in her hurt mood, shown for a moment on each hit. */
+  enemyFigureHurt?: string;
+  /** The scene behind the figure, blurred and darkened (default: her painting). */
+  stageImage?: string;
+  /** Full body, or closer (cropped at the legs); auto picks closer when the stage is short. */
+  figureFraming?: FigureFraming;
   seed: number;
   /** Show the how-to-play card with a Fight button first; otherwise the board deals in at once. */
   intro: boolean;
@@ -97,6 +111,7 @@ export interface BattleHandle {
 }
 
 export type Zone = 'left' | 'vexa' | 'right';
+export type FigureFraming = 'auto' | 'full' | 'close';
 type Die = 'd20' | 'd20a';
 interface Tile {
   id: number;
@@ -201,15 +216,25 @@ const num = (v: string | number) => Number(v);
 function markup(o: ControllerOptions) {
   const E = esc(o.enemyName),
     F = o.rules.foes;
+  const fig = o.enemyFigure;
+  const figure = fig
+    ? `<img class="er-backdrop" src="${esc(o.stageImage ?? o.enemyImage)}" alt="">
+    <div class="er-floor"></div>
+    <div class="er-aura"></div>
+    <div class="er-fig"><div class="er-fig-body"><img class="er-fig-img" src="${esc(fig)}" alt="${E}">${
+      o.enemyFigureHurt ? `<img class="er-fig-hurt" src="${esc(o.enemyFigureHurt)}" alt="">` : ''
+    }<img class="er-fig-flash" src="${esc(fig)}" alt=""></div></div>`
+    : `<img class="er-boss" src="${esc(o.enemyImage)}" alt="${E}">
+    <div class="er-boss-flash"></div>`;
   return `<div class="er-app">
-  <div class="er-stage">
-    <img class="er-boss" src="${esc(o.enemyImage)}" alt="${E}">
-    <div class="er-boss-flash"></div>
+  <div class="er-stage${fig ? ' er-has-fig' : ''}">
+    ${figure}
     <div class="er-shade"></div>
     <div class="er-bossbar${o.devTools ? '' : ' er-few-tools'}">
-      <div class="er-row"><span class="er-name">${E}</span><span class="er-chip er-warded">Warded</span><span class="er-chip er-enraged" hidden>Enraged</span><span class="er-chip er-burn er-vexa-burn" hidden></span></div>
-      <div class="er-bar er-vexa-bar"><b></b><i></i><span class="er-num"></span></div>
-      <div class="er-row"><span class="er-cd er-vexa-cd">3</span><span class="er-intent"></span></div>
+      <div class="er-row er-name-row"><span class="er-name">${E}</span><span class="er-chip er-warded">Warded</span><span class="er-chip er-enraged" hidden>Enraged</span><span class="er-chip er-burn er-vexa-burn" hidden></span></div>
+      <div class="er-flourish"><i></i></div>
+      <div class="er-hpbar er-vexa-bar" role="meter" aria-label="${E}'s health"><div class="er-hpch"><b></b><i style="background-image:url('${hpFillImg}')"></i></div><img class="er-hpfr" src="${hpFrameImg}" alt=""><span class="er-num"></span></div>
+      <div class="er-row er-intent-row"><span class="er-cd er-vexa-cd">3</span><span class="er-intent"></span></div>
     </div>
     <div class="er-tools">${o.devTools ? '<button class="er-charge-btn" aria-label="Charge the whole party (test)" title="Charge the party (test)">⚡</button>' : ''}<button class="er-mute-btn" aria-label="Sound on or off">♪</button>${o.devTools ? '<button class="er-restart-btn" aria-label="Restart fight">↻</button>' : ''}</div>
     <div class="er-lockhint">Tap a ward or ${E} to aim every rune at it</div>
@@ -220,9 +245,9 @@ function markup(o: ControllerOptions) {
     </div>
   </div>
   <div class="er-combo-wrap"><div class="er-combo"></div></div>
-  <div class="er-board-wrap"><div class="er-board"><div class="er-slots"></div></div></div>
+  <div class="er-board-wrap"><img class="er-board-frame" src="${boardFrameImg}" alt=""><div class="er-board"><div class="er-slots"></div></div></div>
   <div class="er-hero">
-    <div class="er-party-top"><span class="er-hero-name">Party</span><div class="er-bar er-hero-bar"><b></b><i></i><span class="er-num"></span></div><span class="er-armor"></span></div>
+    <div class="er-party-top"><span class="er-hero-name">Party</span><div class="er-bar er-hero-bar"><img class="er-barfr" src="${barFrameImg}" alt=""><div class="er-barch"><b></b><i></i></div><span class="er-num"></span></div><span class="er-armor"></span></div>
     <div class="er-party"></div>
   </div>
   <div class="er-red-flash"></div>
@@ -268,8 +293,14 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
   const $ = <T extends Element = HTMLElement>(s: string) => root.querySelector(s) as T;
   const app = $('.er-app'),
     stage = $('.er-stage'),
-    boss = $<HTMLImageElement>('.er-boss'),
-    bossFlash = $('.er-boss-flash'),
+    FIG = !!o.enemyFigure,
+    boss = FIG ? $('.er-fig') : $('.er-boss'),
+    bossFlash = FIG ? $('.er-fig-flash') : $('.er-boss-flash'),
+    figImg = FIG ? $<HTMLImageElement>('.er-fig-img') : null,
+    figHurt = root.querySelector<HTMLElement>('.er-fig-hurt'),
+    bossbar = $('.er-bossbar'),
+    boardWrap = $('.er-board-wrap'),
+    boardFrame = $('.er-board-frame'),
     redFlash = $('.er-red-flash'),
     board = $('.er-board'),
     slots = $('.er-slots'),
@@ -487,12 +518,23 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     await Promise.all(jobs);
   }
   function layout() {
-    const w = Math.min(app.clientWidth - 16, 456);
-    s = Math.floor(w / COLS);
-    const room = app.clientHeight - 26 - heroBox.offsetHeight - 170;
-    if (room < s * ROWS) s = Math.max(36, Math.floor(room / ROWS));
+    // The board frame art: the grid's place in it, and how far the visible frame reaches past the grid (in cells).
+    const FR = { left: 89 / 1312, top: 119 / 1199, w: 1133 / 1312, h: 969 / 1199 };
+    const visW = (1226 / 1133) * COLS,
+      above = (59 / 969) * ROWS,
+      below = (87 / 969) * ROWS;
+    s = Math.floor(Math.min(app.clientWidth - 8, 480) / visW);
+    // the stage keeps at least 30% of the screen (170px minimum) so the enemy stays in view
+    const room = app.clientHeight - 26 - heroBox.offsetHeight - Math.max(170, app.clientHeight * 0.3);
+    if (room < s * (ROWS + below)) s = Math.max(34, Math.floor(room / (ROWS + below)));
     board.style.width = s * COLS + 'px';
     board.style.height = s * ROWS + 'px';
+    boardWrap.style.paddingBottom = Math.round(s * below - 4) + 'px';
+    boardWrap.style.marginTop = Math.round(Math.max(0, s * above - 26)) + 'px';
+    const fw = (s * COLS) / FR.w;
+    boardFrame.style.width = fw + 'px';
+    boardFrame.style.left = board.offsetLeft - FR.left * fw + 'px';
+    boardFrame.style.top = board.offsetTop - FR.top * (fw * (1199 / 1312)) + 'px';
     slots.style.gridTemplateColumns = `repeat(${COLS},1fr)`;
     if (!slots.children.length) for (let i = 0; i < COLS * ROWS; i++) slots.appendChild(document.createElement('div'));
     const lanes = $('.er-lanes');
@@ -510,7 +552,34 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
           if (d) d.style.setProperty('--s', String(s));
         }
       }
+    if (FIG) placeFigure();
   }
+  // The figure stands under the enemy's bars: full body when the stage has room, else cropped at the legs.
+  function placeFigure() {
+    const hud = bossbar.offsetTop + bossbar.offsetHeight;
+    const room = stage.clientHeight - hud;
+    const close = o.figureFraming === 'close' || (o.figureFraming !== 'full' && room < 140);
+    stage.classList.toggle('er-close', close);
+    stage.style.setProperty('--hud', hud + 'px');
+    if (!figImg || !figImg.naturalWidth) return;
+    // Aim at her body: the tap target covers the visible part of the figure.
+    const lanes = $('.er-lanes').getBoundingClientRect(),
+      st = stage.getBoundingClientRect(),
+      im = figImg.getBoundingClientRect();
+    const top = Math.max(im.top, st.top + hud - 20),
+      bottom = Math.min(im.bottom, st.bottom - 40);
+    const h = Math.max(80, bottom - top),
+      w = Math.max(110, Math.min(im.width * 0.8, 220));
+    Object.assign(pods.vexa.style, {
+      top: top - lanes.top + 'px',
+      height: h + 'px',
+      width: w + 'px',
+      marginLeft: -w / 2 + 'px',
+    });
+  }
+  figImg?.addEventListener('load', () => {
+    if (!dead) layout();
+  });
   function swapData(a: number, b: number) {
     const [r1, c1] = rc(a),
       [r2, c2] = rc(b);
@@ -614,8 +683,13 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     const [x, y] = foeXY(k);
     float(amt, cls, x, y - 10);
     const tgt = k === 'vexa' ? boss : pods[k].querySelector('.er-stone')!;
-    gsap.fromTo(tgt, { x: -5 }, { x: 0, duration: 0.25, ease: 'elastic.out(1,.3)' });
-    if (k === 'vexa') gsap.fromTo(bossFlash, { opacity: 0.55 }, { opacity: 0, duration: 0.3 });
+    if (k === 'vexa' && FIG) {
+      // A figure recoils with her whole body, flashes red and shows her hurt face for a moment.
+      gsap.fromTo(boss, { x: 9, rotation: 2.5 }, { x: 0, rotation: 0, duration: 0.55, ease: 'elastic.out(1,.4)' });
+      gsap.fromTo(bossFlash, { opacity: 0.8 }, { opacity: 0, duration: 0.35 });
+      if (figHurt) gsap.fromTo(figHurt, { opacity: 1 }, { opacity: 0, duration: 0.25, delay: 0.45 });
+    } else gsap.fromTo(tgt, { x: -5 }, { x: 0, duration: 0.25, ease: 'elastic.out(1,.3)' });
+    if (k === 'vexa' && !FIG) gsap.fromTo(bossFlash, { opacity: 0.55 }, { opacity: 0, duration: 0.3 });
     thud(cls === 'crit' ? 0.4 : 0.18);
     if (f.hp <= 0 && k !== 'vexa') breakWard(k);
     if (k === 'vexa' && !f.enraged && f.hp > 0 && f.hp <= f.max / 2) {
@@ -1071,8 +1145,15 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       gsap.to(stone, { y: 0, scale: 1, duration: 0.3 });
     } else {
       banner(V.enraged ? 'Soul Rend' : 'Soul Lash');
-      await tw(boss, { scale: 1.08, duration: 0.25, ease: 'power2.in' });
-      gsap.to(boss, { scale: 1, duration: 0.4 });
+      if (FIG) {
+        // She gathers, then lunges at the party.
+        await tw(boss, { scale: 0.97, y: 4, duration: 0.2, ease: 'power1.out' });
+        await tw(boss, { scale: 1.14, y: -6, duration: 0.22, ease: 'power3.in' });
+        gsap.to(boss, { scale: 1, y: 0, duration: 0.45, delay: 0.1, ease: 'power2.out' });
+      } else {
+        await tw(boss, { scale: 1.08, duration: 0.25, ease: 'power2.in' });
+        gsap.to(boss, { scale: 1, duration: 0.4 });
+      }
     }
     hurt(dmg);
     await wait(450);
@@ -2234,7 +2315,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
   const party = $('.er-party');
   party.innerHTML = HEROES.map(
     (h) =>
-      `<button class="er-hc" data-h="${h.id}" aria-label="${esc(h.name)}: ${esc(h.power)}"><img class="er-face" src="${esc(h.face)}" alt=""><div class="er-fill"></div><span class="er-pct"></span><span class="er-hc-rune"><img src="${IMG[h.rune]}" alt=""></span><span class="er-nm">${esc(h.name)}<small>${esc(h.power)}</small></span></button>`,
+      `<button class="er-hc" data-h="${h.id}" aria-label="${esc(h.name)}: ${esc(h.power)}" style="background-image:url('${cardFrameImg}')"><img class="er-face" src="${esc(h.face)}" alt=""><span class="er-pct"></span><span class="er-hc-rune" style="background-image:url('${cardOrbImg}')"><img src="${IMG[h.rune]}" alt=""></span><span class="er-nm">${esc(h.name)}</span><span class="er-pw">${esc(h.power)}</span><span class="er-cbar"><i class="er-fill"></i></span></button>`,
   ).join('');
   party.querySelectorAll<HTMLElement>('.er-hc').forEach((b) =>
     b.addEventListener('click', () => {
@@ -2268,7 +2349,8 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
   function setBar(el: Element, frac: number, text?: string) {
     const i = el.querySelector<HTMLElement>('i')!,
       b = el.querySelector<HTMLElement>('b');
-    i.style.transform = `scaleX(${frac})`;
+    if (el.classList.contains('er-hpbar')) i.style.clipPath = `inset(0 ${(1 - frac) * 100}% 0 0)`;
+    else i.style.transform = `scaleX(${frac})`;
     if (b) b.style.transform = `scaleX(${frac})`;
     const n = el.querySelector('.er-num');
     if (n && text != null) n.textContent = text;
@@ -2281,6 +2363,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     warded.hidden = !w || !WARDS;
     warded.textContent = `Warded −${w * 25}%`;
     $('.er-enraged').hidden = !v.enraged;
+    stage.classList.toggle('er-raging', v.enraged);
     const vb = $('.er-vexa-burn');
     vb.hidden = !v.burn;
     vb.textContent = `Burning ${v.burn}`;
@@ -2312,7 +2395,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     for (const h of HEROES) {
       const b = $(`.er-hc[data-h=${h.id}]`),
         cv = S.charge[h.id];
-      b.querySelector<HTMLElement>('.er-fill')!.style.transform = `scaleY(${cv / 100})`;
+      b.querySelector<HTMLElement>('.er-fill')!.style.transform = `scaleX(${cv / 100})`;
       b.querySelector('.er-pct')!.textContent = cv >= 100 ? 'TAP' : cv + '%';
       b.classList.toggle('er-ready', cv >= 100);
     }
@@ -2444,7 +2527,8 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       q = (c: string) => card.querySelector<HTMLElement>(c)!,
       V = N.foes.vexa,
       turns = (n: number) => (n === 1 ? 'TURN' : 'TURNS');
-    q('.er-foe-img').setAttribute('src', o.enemyImage);
+    q('.er-foe-img').setAttribute('src', o.enemyFigure ?? o.enemyImage);
+    card.classList.toggle('er-foe-fig', FIG);
     q('.er-f-name').textContent = o.enemyName;
     q('.er-f-title').textContent = o.enemyTitle ?? '';
     q('.er-f-every').innerHTML = `${V.every}<em>${turns(V.every)}</em>`;

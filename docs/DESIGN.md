@@ -35,6 +35,28 @@ approved the prototype ("lock this"). The prototype is `docs/reference/ember-run
 - Difficulty scales her health and damage (and the wards'): easy 0.75 / 0.8, normal 1 / 1, hard 1.25 / 1.15,
   brutal 1.5 / 1.3 (`DIFFICULTY` in `engine/rules.ts`).
 
+## The look (2026-11-25)
+
+Ayalon's Water Hag layout (`docs/reference/design/water-hag-layout.png`) with his antique gold art in
+`src/features/battle/assets/ui/`:
+- Her name in large caps over a gold rule with a diamond, then her health in Ember Wheels' ornate frame (the
+  textured red fill is clipped, not squeezed), then the countdown seal and her next move.
+- The board sits in the gold board frame; its 7x6 cells line up with the tiles (`layout()` places the frame from the
+  art's measured grid).
+- Hero cards use the card frame: portrait in the window, charging rune in the seal, name, the power in a plate tinted
+  with the hero's colour, the charge in the thin bar. The party's health uses the thin gold bar frame.
+- Short phones (under 740px tall) get a tighter header and narrower cards.
+
+## The enemy as a figure
+
+`enemyFigure` (a Studio full-figure cutout) puts her on the stage in place of the painting: she stands in front of
+`stageImage` (the story's scene; her painting by default), blurred and darkened, with the wards at her feet.
+- Framing: full body when the stage below the header has 140px or more, else closer (cropped at the legs);
+  `figureFraming` forces either.
+- She breathes (a slow idle), recoils with a red flash and her hurt mood (`enemyFigureHurt`) when hit, gathers and
+  lunges when she attacks, and breathes faster in a red aura when enraged. Tapping her body aims at her.
+- The enemy card shows the figure too. The demo plays Edda; `?painting` shows Vexa's painting.
+
 ## The story tier
 
 `battleTier`: a win with 60% of the party's HP left is critSuccess, any other win success; a loss with the enemy

@@ -84,28 +84,242 @@
   mix-blend-mode: overlay;
   pointer-events: none;
 }
+/* the enemy as a figure (2026-11-25): a cutout standing in front of the blurred scene, scaled to the stage */
+.er-backdrop {
+  position: absolute;
+  inset: -20px;
+  width: calc(100% + 40px);
+  height: calc(100% + 40px);
+  max-width: none;
+  object-fit: cover;
+  filter: blur(9px) brightness(0.42) saturate(0.8);
+}
+.er-floor {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  bottom: -30px;
+  height: 46%;
+  background:
+    radial-gradient(60% 55% at 50% 30%, rgba(255, 106, 43, 0.14), transparent 70%),
+    linear-gradient(180deg, transparent, rgba(10, 6, 7, 0.85) 70%);
+  pointer-events: none;
+}
+.er-aura {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(38% 46% at 50% 62%, rgba(195, 40, 58, 0.6), transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+}
+.er-stage.er-raging .er-aura {
+  animation: er-aura 1.4s ease-in-out infinite;
+}
+@keyframes er-aura {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+.er-fig {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--hud, 110px) - 4px);
+  bottom: 8px;
+  display: flex;
+  justify-content: center;
+  transform-origin: 50% 100%;
+  pointer-events: none;
+}
+.er-stage.er-close .er-fig {
+  top: calc(var(--hud, 110px) - 4px);
+  bottom: auto;
+  height: calc((100% - var(--hud, 110px) + 4px) * 1.7);
+  transform-origin: 50% 40%;
+}
+.er-fig::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 46%;
+  max-width: 220px;
+  height: 18px;
+  transform: translateX(-50%);
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.75), transparent);
+  z-index: -1;
+}
+.er-stage.er-close .er-fig::after {
+  display: none;
+}
+.er-fig-body {
+  position: relative;
+  height: 100%;
+  transform-origin: 50% 100%;
+  animation: er-breathe 3.4s ease-in-out infinite;
+}
+.er-stage.er-raging .er-fig-body {
+  animation-duration: 1.6s;
+}
+@keyframes er-breathe {
+  0%,
+  100% {
+    transform: scale(1, 1);
+  }
+  50% {
+    transform: scale(1.012, 1.018);
+  }
+}
+.er-root .er-fig-body img {
+  display: block;
+  height: 100%;
+  width: auto;
+  max-width: none;
+}
+.er-fig-img {
+  filter: drop-shadow(0 0 1px #000) drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6));
+}
+.er-root .er-fig-hurt,
+.er-root .er-fig-flash {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+}
+.er-fig-flash {
+  filter: brightness(0.5) sepia(1) hue-rotate(-40deg) saturate(9) brightness(1.4);
+}
+.er-stage.er-has-fig .er-lockhint {
+  bottom: auto;
+  top: calc(var(--hud, 110px) + 2px);
+  z-index: 3;
+}
+.er-stage.er-has-fig .er-shade {
+  background: linear-gradient(180deg, rgba(18, 12, 13, 0.6) 0%, rgba(18, 12, 13, 0) 34%, rgba(18, 12, 13, 0) 70%, rgba(18, 12, 13, 0.6) 100%);
+}
 .er-bossbar {
   position: absolute;
   top: 8px;
-  left: max(12px, env(safe-area-inset-left, 0px));
-  right: calc(max(12px, env(safe-area-inset-right, 0px)) + 108px);
+  left: max(10px, env(safe-area-inset-left, 0px));
+  right: max(10px, env(safe-area-inset-right, 0px));
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-.er-bossbar.er-few-tools {
-  right: calc(max(12px, env(safe-area-inset-right, 0px)) + 40px);
+  z-index: 2;
+  pointer-events: none;
 }
 .er-bossbar .er-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
+/* the name row leaves room for the buttons on the right */
+.er-bossbar .er-name-row {
+  padding: 0 108px 0 4px;
+  min-height: 34px;
+}
+.er-bossbar.er-few-tools .er-name-row {
+  padding-right: 44px;
+}
 .er-bossbar .er-name {
   font-family: var(--display);
-  font-size: 22px;
-  letter-spacing: 0.04em;
-  text-shadow: 0 2px 6px #000;
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: #f6ead6;
+  text-shadow:
+    0 2px 0 #3a1a0c,
+    0 3px 8px #000;
+  white-space: nowrap;
+}
+/* the gold rule with a diamond under her name (Water Hag layout, 2026-11-25) */
+.er-flourish {
+  position: relative;
+  width: 150px;
+  height: 10px;
+  margin: 1px 0 0 4px;
+}
+.er-flourish::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 4px;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(242, 198, 109, 0.95), rgba(242, 198, 109, 0.95) 40%, transparent 41%, transparent 59%, rgba(242, 198, 109, 0.95) 60%, transparent);
+}
+.er-flourish i {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  transform: rotate(45deg);
+  border: 2px solid var(--gold);
+  background: #3a1a0c;
+}
+/* her health: the ornate frame from Ember Wheels over a textured red fill */
+.er-hpbar {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  aspect-ratio: 900 / 197;
+  margin: -14px auto -10px;
+}
+.er-hpch,
+.er-hpbar .er-num {
+  position: absolute;
+  left: 5.42%;
+  top: 35.56%;
+  width: 89.26%;
+  height: 38.15%;
+}
+.er-hpch {
+  border-radius: 999px;
+  overflow: hidden;
+  background: #160404;
+  box-shadow: inset 0 3px 8px #000;
+}
+.er-hpch > i,
+.er-hpch > b {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 50%;
+}
+.er-hpch > i {
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  transition: clip-path 0.35s ease;
+}
+.er-hpch > b {
+  background: #ffd9a0;
+  opacity: 0.85;
+  transition: transform 0.9s ease 0.25s;
+}
+.er-hpfr {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.7));
+}
+.er-hpbar .er-num {
+  display: grid;
+  place-items: center;
+  font-family: var(--display);
+  font-size: 15px;
+  color: #fff7e6;
+  text-shadow: 0 1px 2px #000;
+  font-variant-numeric: tabular-nums;
+  z-index: 1;
+}
+.er-intent-row {
+  pointer-events: auto;
 }
 .er-chip {
   font-size: 11px;
@@ -165,6 +379,7 @@
   border-radius: 12px;
   background: #2a1012;
   border: 2px solid var(--blood);
+  color: var(--ink);
   font-weight: 800;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
@@ -182,9 +397,19 @@
   font-size: 12px;
   font-weight: 700;
   color: var(--ink);
-  background: rgba(10, 6, 7, 0.7);
-  padding: 2px 8px;
-  border-radius: 8px;
+  background: rgba(10, 6, 7, 0.78);
+  padding: 3px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(242, 198, 109, 0.5);
+}
+.er-bossbar .er-vexa-cd {
+  min-width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  background: radial-gradient(circle at 40% 35%, #6b1a22, #2a0a0e 70%);
+  font-family: var(--display);
+  font-size: 17px;
 }
 /* lanes: aligned to the board columns */
 .er-lanes {
@@ -327,32 +552,27 @@
 }
 /* board */
 .er-board-wrap {
+  position: relative;
   display: grid;
   place-items: center;
-  padding: 0 max(8px, env(safe-area-inset-right, 0px)) 0 max(8px, env(safe-area-inset-left, 0px));
+  padding: 0 max(4px, env(safe-area-inset-right, 0px)) 0 max(4px, env(safe-area-inset-left, 0px));
+}
+/* the antique gold board (2026-11-25): its 7x6 cells line up with the tiles; layout() places it */
+.er-board-frame {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.7));
 }
 .er-board {
   position: relative;
-  border-radius: 10px;
   overflow: hidden;
-  background: #0c0809;
-  box-shadow:
-    0 0 0 2px #3b2a1c,
-    0 0 0 5px #120c0d,
-    0 0 0 7px var(--bronze),
-    0 10px 30px #000;
   touch-action: none;
 }
 .er-slots {
   position: absolute;
   inset: 0;
   display: grid;
-}
-.er-slots div {
-  border: 1px solid rgba(185, 138, 75, 0.08);
-}
-.er-slots div:nth-child(odd) {
-  background: rgba(255, 235, 200, 0.035);
 }
 .er-tile {
   position: absolute;
@@ -520,11 +740,12 @@
   gap: 8px;
 }
 .er-hero-name {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-family: var(--display);
+  font-size: 19px;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--dim);
+  color: #f6ead6;
+  text-shadow: 0 2px 4px #000;
   white-space: nowrap;
 }
 .er-armor {
@@ -537,23 +758,63 @@
 .er-hero-bar {
   flex: 1;
   min-width: 0;
+  height: auto;
+  aspect-ratio: 1980 / 117;
+  min-height: 16px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  overflow: visible;
 }
-.er-hero-bar > i {
-  background: linear-gradient(180deg, #7fe08f, #2d8a44);
+.er-barfr {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+}
+.er-barch {
+  position: absolute;
+  left: 1%;
+  right: 1%;
+  top: 14%;
+  bottom: 14%;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.er-barch > i,
+.er-barch > b {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 50%;
+}
+.er-barch > i {
+  background: linear-gradient(180deg, #8af09a, #2d9a48 55%, #1f6e33);
+  transition: transform 0.35s ease;
+}
+.er-barch > b {
+  background: rgba(255, 255, 255, 0.55);
+  transition: transform 0.9s ease 0.25s;
+}
+.er-hero-bar .er-num {
+  font-family: var(--display);
+  font-size: 12px;
+  font-weight: 400;
 }
 .er-party {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 7px;
+  gap: 6px;
 }
+/* hero cards on the antique gold card frame (2026-11-25): portrait in the window, rune in the seal, power in the
+   plate, charge in the thin bar. Positions are fractions of the frame art (844 x 1295). */
 .er-hc {
   position: relative;
-  aspect-ratio: 1/1.08;
+  aspect-ratio: 844 / 1295;
   max-width: 100%;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 2px solid #4a3523;
-  background: #1c1310;
+  border: 0;
+  border-radius: 9% / 6%;
+  background: transparent center / 100% 100% no-repeat;
   padding: 0;
   cursor: pointer;
   color: var(--ink);
@@ -561,74 +822,96 @@
 }
 .er-hc img.er-face {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  left: 3.6%;
+  top: 2.4%;
+  width: 92.8%;
+  height: 79.6%;
+  border-radius: 9% 9% 0 0 / 6% 6% 0 0;
   object-fit: cover;
-  object-position: 50% 20%;
-  filter: grayscale(0.55) brightness(0.75);
+  object-position: 50% 18%;
+  -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 72%, transparent 100%);
+  filter: grayscale(0.4) brightness(0.8);
   transition: filter 0.3s;
-}
-.er-hc .er-fill {
-  position: absolute;
-  inset: 0;
-  transform-origin: 50% 100%;
-  transform: scaleY(0);
-  background: linear-gradient(0deg, var(--hc) 0%, transparent 100%);
-  opacity: 0.55;
-  transition: transform 0.45s ease;
 }
 .er-hc .er-nm {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 0;
-  padding: 10px 2px 3px;
-  background: linear-gradient(0deg, rgba(10, 6, 7, 0.95), transparent);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
+  bottom: 18.6%;
+  font-family: var(--display);
+  font-size: 14px;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   text-align: center;
-  line-height: 1.05;
+  line-height: 1;
+  color: #f6ead6;
+  text-shadow:
+    0 1px 0 #000,
+    0 2px 6px #000;
 }
-.er-hc .er-nm small {
-  display: block;
-  font-size: 9px;
+.er-hc .er-pw {
+  position: absolute;
+  left: 5.4%;
+  right: 5%;
+  top: 83.3%;
+  height: 7.7%;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--hc2) 70%, transparent);
+  font-size: 9.5px;
   font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: none;
-  color: var(--dim);
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-shadow: 0 1px 2px #000;
+}
+.er-hc .er-cbar {
+  position: absolute;
+  left: 9.6%;
+  width: 80.4%;
+  top: 93.1%;
+  height: 2.6%;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.er-hc .er-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  background: linear-gradient(180deg, var(--hc), var(--hc2));
+  transition: transform 0.45s ease;
 }
 .er-hc .er-hc-rune {
   position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: rgba(10, 6, 7, 0.75);
+  left: 69.4%;
+  top: 2.6%;
+  width: 27.6%;
+  aspect-ratio: 1;
+  background: center / 100% 100% no-repeat;
   display: grid;
   place-items: center;
 }
 .er-hc .er-hc-rune img {
-  width: 17px;
-  height: 17px;
+  width: 64%;
+  height: 64%;
+  object-fit: contain;
 }
 .er-hc .er-pct {
   position: absolute;
-  top: 4px;
-  left: 5px;
-  font-size: 10px;
-  font-weight: 800;
-  text-shadow: 0 1px 2px #000;
+  top: 3.6%;
+  left: 9%;
+  font-family: var(--display);
+  font-size: 13px;
+  text-shadow:
+    0 1px 0 #000,
+    0 1px 4px #000;
   font-variant-numeric: tabular-nums;
 }
 .er-hc.er-ready {
-  border-color: var(--gold);
-  box-shadow:
-    0 0 14px var(--hc),
-    0 0 0 1px var(--gold) inset;
+  filter: drop-shadow(0 0 7px var(--hc));
   animation: er-pulse 0.8s ease-in-out infinite alternate;
 }
 .er-hc.er-ready img.er-face {
@@ -638,16 +921,20 @@
   color: var(--gold);
 }
 .er-hc[data-h='kael'] {
-  --hc: #e8e2d0;
+  --hc: #ff5a5a;
+  --hc2: #8a1a24;
 }
 .er-hc[data-h='garran'] {
   --hc: #6fb7ff;
+  --hc2: #1d4d8a;
 }
 .er-hc[data-h='mara'] {
-  --hc: #ff6a2b;
+  --hc: #ffa03c;
+  --hc2: #8a3a10;
 }
 .er-hc[data-h='elin'] {
-  --hc: #5fd17a;
+  --hc: #6fe08a;
+  --hc2: #1f6e33;
 }
 .er-hc:focus-visible,
 .er-btn:focus-visible {
@@ -981,6 +1268,12 @@
   object-fit: cover;
   object-position: 57% 40%;
 }
+.er-foe.er-foe-fig .er-foe-img {
+  object-fit: contain;
+  object-position: 50% 12%;
+  top: 4%;
+  height: 74%;
+}
 .er-foe-art::after {
   content: '';
   position: absolute;
@@ -1137,4 +1430,44 @@
   font-size: 12px;
   letter-spacing: 0.14em;
   color: #8a7a60;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .er-fig-body,
+  .er-stage.er-raging .er-aura {
+    animation: none;
+  }
+}
+
+/* short phones (an iPhone SE is 667 tall): a tighter header and narrower cards leave the enemy some room */
+@media (max-height: 740px) {
+  .er-bossbar .er-name {
+    font-size: 24px;
+  }
+  .er-bossbar .er-name-row {
+    min-height: 30px;
+  }
+  .er-flourish {
+    display: none;
+  }
+  .er-hpbar {
+    max-width: 300px;
+    margin: -10px auto -9px;
+  }
+  .er-bossbar .er-vexa-cd {
+    min-width: 26px;
+    height: 26px;
+    font-size: 15px;
+  }
+  .er-party {
+    grid-template-columns: repeat(4, minmax(0, 72px));
+    justify-content: center;
+    gap: 8px;
+  }
+  .er-hc .er-nm {
+    font-size: 12px;
+  }
+  .er-hc .er-pw {
+    font-size: 8.5px;
+  }
 }

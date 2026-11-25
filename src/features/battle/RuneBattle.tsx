@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { rulesFor, type Difficulty, type Rules } from '../engine';
-import { mountBattle, type BattleHandle, type BattleResult } from './controller';
+import { mountBattle, type BattleHandle, type BattleResult, type FigureFraming } from './controller';
 import { partyFor, type PartyOverrides } from './heroes';
 import vexaImg from './assets/vexa.webp';
 import './battle.css';
@@ -9,6 +9,14 @@ export interface RuneBattleProps {
   /** The enemy's name and picture (default Vexa, the horned witch). */
   enemyName?: string;
   enemyImage?: string;
+  /** A cutout of the whole enemy (a Studio full-figure portrait): she stands on the stage in place of the painting. */
+  enemyFigure?: string;
+  /** The cutout in her hurt mood (same outline), shown for a moment on each hit. */
+  enemyFigureHurt?: string;
+  /** The scene behind the figure, blurred and darkened (default: enemyImage). */
+  stageImage?: string;
+  /** Full body, or closer (cropped at the legs). Default auto: closer when the stage is short. */
+  figureFraming?: FigureFraming;
   /** Her two wards (Ash and Hex) stand in front of her; false is the solo fight. Default true. */
   wards?: boolean;
   difficulty?: Difficulty;
@@ -72,6 +80,10 @@ export function RuneBattle(props: RuneBattleProps) {
   const {
     enemyName = 'Vexa',
     enemyImage = vexaImg,
+    enemyFigure,
+    enemyFigureHurt,
+    stageImage,
+    figureFraming = 'auto',
     wards = true,
     difficulty = 'normal',
     rules,
@@ -88,6 +100,10 @@ export function RuneBattle(props: RuneBattleProps) {
   const setup = JSON.stringify({
     enemyName,
     enemyImage,
+    enemyFigure,
+    enemyFigureHurt,
+    stageImage,
+    figureFraming,
     wards,
     difficulty,
     rules,
@@ -115,6 +131,10 @@ export function RuneBattle(props: RuneBattleProps) {
       heroes: partyFor(s.party),
       enemyName: s.enemyName!,
       enemyImage: s.enemyImage!,
+      enemyFigure: s.enemyFigure,
+      enemyFigureHurt: s.enemyFigureHurt,
+      stageImage: s.stageImage,
+      figureFraming: s.figureFraming,
       seed: s.seed ?? Math.floor(Math.random() * 2 ** 31),
       intro: showTutorial(s.tutorial),
       startAt: s.startAt,

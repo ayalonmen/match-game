@@ -9,6 +9,7 @@ export {
   type PartyOverrides,
   type BattleResult,
   type BattleHandle,
+  type FigureFraming,
 } from './features/battle';
 export {
   rulesFor,
