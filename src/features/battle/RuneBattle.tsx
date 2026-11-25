@@ -1,0 +1,109 @@
+import { useEffect, useRef } from 'react';
+import { rulesFor, type Difficulty, type Rules } from '../engine';
+import { mountBattle, type BattleHandle, type BattleResult } from './controller';
+import { partyFor, type PartyOverrides } from './heroes';
+import vexaImg from './assets/vexa.webp';
+import './battle.css';
+
+export interface RuneBattleProps {
+  /** The enemy's name and picture (default Vexa, the horned witch). */
+  enemyName?: string;
+  enemyImage?: string;
+  /** Her two wards (Ash and Hex) stand in front of her; false is the solo fight. Default true. */
+  wards?: boolean;
+  difficulty?: Difficulty;
+  /** Every number, for a host that tunes the fight itself; wins over wards / difficulty. */
+  rules?: Rules;
+  /** Other names or pictures for the party (the powers stay). */
+  party?: PartyOverrides;
+  seed?: number;
+  /** Show the how-to-play card first (default true); false deals the board in at once. */
+  tutorial?: boolean;
+  introTitle?: string;
+  introSub?: string;
+  /** With onContinue: also offer Fight again after the fight. */
+  allowRetry?: boolean;
+  /** A loss only offers Try again. */
+  mustWin?: boolean;
+  /** The test buttons (charge the party, restart). */
+  devTools?: boolean;
+  /** When the fight ends, before the end card. */
+  onEnd?: (r: BattleResult) => void;
+  /** The end card's Continue button; without it the card offers Fight again. */
+  onContinue?: (r: BattleResult) => void;
+  className?: string;
+  /** For tests: the running fight. */
+  handleRef?: (h: BattleHandle | null) => void;
+}
+
+/** Ember Runes: a match-3 fight. Mounts once per seed / setup; the host owns everything after onContinue. */
+export function RuneBattle(props: RuneBattleProps) {
+  const host = useRef<HTMLDivElement>(null);
+  const cbs = useRef(props);
+  useEffect(() => {
+    cbs.current = props;
+  });
+  const {
+    enemyName = 'Vexa',
+    enemyImage = vexaImg,
+    wards = true,
+    difficulty = 'normal',
+    rules,
+    party,
+    seed,
+    tutorial = true,
+  } = props;
+  const { introTitle = 'Ember Runes', introSub, allowRetry = false, mustWin = false, devTools = false } = props;
+  const hasContinue = !!props.onContinue;
+  const setup = JSON.stringify({
+    enemyName,
+    enemyImage,
+    wards,
+    difficulty,
+    rules,
+    party,
+    seed,
+    tutorial,
+    introTitle,
+    introSub,
+    allowRetry,
+    mustWin,
+    devTools,
+    hasContinue,
+  });
+
+  useEffect(() => {
+    const el = host.current;
+    if (!el) return;
+    const s = JSON.parse(setup) as typeof props & { hasContinue: boolean };
+    const h = mountBattle(el, {
+      rules: s.rules ?? rulesFor({ wards: s.wards, difficulty: s.difficulty, enemyName: s.enemyName }),
+      heroes: partyFor(s.party),
+      enemyName: s.enemyName!,
+      enemyImage: s.enemyImage!,
+      seed: s.seed ?? Math.floor(Math.random() * 2 ** 31),
+      intro: !!s.tutorial,
+      introTitle: s.introTitle!,
+      introSub: s.introSub ?? `Fight ${s.enemyName}`,
+      devTools: !!s.devTools,
+      allowRetry: !!s.allowRetry,
+      mustWin: !!s.mustWin,
+      hasContinue: s.hasContinue,
+      onEnd: (r) => cbs.current.onEnd?.(r),
+      onContinue: (r) => cbs.current.onContinue?.(r),
+    });
+    cbs.current.handleRef?.(h);
+    return () => {
+      cbs.current.handleRef?.(null);
+      h.destroy();
+    };
+  }, [setup]);
+
+  return (
+    <div
+      ref={host}
+      className={props.className}
+      style={props.className ? undefined : { width: '100%', height: '100%' }}
+    />
+  );
+}

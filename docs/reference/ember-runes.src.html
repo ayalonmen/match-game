@@ -1,0 +1,3434 @@
+<title>Ember Runes</title>
+<meta name="claude:viewport-fit-sides" content="cover" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Alegreya+Sans:wght@400;700;800&display=swap"
+/>
+<style>
+  /* Layout: one portrait column. Enemy stage on top (Vexa + her two wards), 7x6 rune board, the party at the bottom. */
+  :root {
+    --night: #120c0d;
+    --ash: #1f1517;
+    --bronze: #b98a4b;
+    --gold: #f2c66d;
+    --ember: #ff6a2b;
+    --blood: #c3283a;
+    --hex: #9b5cff;
+    --heal: #5fd17a;
+    --frost: #8fd3ff;
+    --ink: #f3e6d3;
+    --dim: #a8937e;
+    --display: 'IM Fell English SC', 'Palatino Linotype', Georgia, serif;
+    --body: 'Alegreya Sans', 'Segoe UI', system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  [hidden] {
+    display: none !important;
+  }
+  html,
+  body {
+    height: 100%;
+    background: var(--night);
+    color: var(--ink);
+    font-family: var(--body);
+    overflow: hidden;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  #app {
+    position: relative;
+    height: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: radial-gradient(120% 60% at 50% 0%, #2b1714 0%, var(--night) 70%);
+  }
+  /* stage */
+  #stage {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 170px;
+    overflow: hidden;
+  }
+  #stage .boss {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 30%;
+    max-width: none;
+  }
+  #stage .shade {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      180deg,
+      rgba(18, 12, 13, 0.55) 0%,
+      rgba(18, 12, 13, 0) 30%,
+      rgba(18, 12, 13, 0.2) 62%,
+      var(--night) 100%
+    );
+    pointer-events: none;
+  }
+  #bossFlash {
+    position: absolute;
+    inset: 0;
+    background: #fff;
+    opacity: 0;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
+  .bossbar {
+    position: absolute;
+    top: 8px;
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .bossbar .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .bossbar .name {
+    font-family: var(--display);
+    font-size: 22px;
+    letter-spacing: 0.04em;
+    text-shadow: 0 2px 6px #000;
+  }
+  .chip {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    background: rgba(0, 0, 0, 0.45);
+  }
+  .chip.warded {
+    color: var(--frost);
+  }
+  .chip.enraged {
+    color: var(--ember);
+  }
+  .chip.burn {
+    color: var(--ember);
+  }
+  .bar {
+    position: relative;
+    height: 12px;
+    border-radius: 7px;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(242, 198, 109, 0.55);
+    overflow: hidden;
+  }
+  .bar > i {
+    position: absolute;
+    inset: 0;
+    transform-origin: 0 50%;
+    background: linear-gradient(180deg, #ff5468, #a3142a);
+    transition: transform 0.35s ease;
+  }
+  .bar > b {
+    position: absolute;
+    inset: 0;
+    transform-origin: 0 50%;
+    background: rgba(255, 255, 255, 0.55);
+    transition: transform 0.9s ease 0.25s;
+  }
+  .bar .num {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 10px;
+    font-weight: 800;
+    text-shadow: 0 1px 2px #000;
+    font-variant-numeric: tabular-nums;
+  }
+  .cd {
+    display: inline-grid;
+    place-items: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 4px;
+    border-radius: 12px;
+    background: #2a1012;
+    border: 2px solid var(--blood);
+    font-weight: 800;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  .cd.soon {
+    background: var(--blood);
+    animation: pulse 0.7s ease-in-out infinite alternate;
+  }
+  @keyframes pulse {
+    to {
+      transform: scale(1.15);
+    }
+  }
+  .intent {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ink);
+    background: rgba(10, 6, 7, 0.7);
+    padding: 2px 8px;
+    border-radius: 8px;
+  }
+  /* lanes: aligned to the board columns */
+  #lanes {
+    position: absolute;
+    left: 50%;
+    bottom: 6px;
+    height: 100px;
+    pointer-events: none;
+  }
+  .pod {
+    position: absolute;
+    bottom: 0;
+    width: 86px;
+    margin-left: -43px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .pod .stone {
+    position: relative;
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-family: var(--display);
+    font-size: 30px;
+    line-height: 1;
+    border: 2px solid var(--c);
+    background: radial-gradient(circle at 40% 35%, rgba(255, 255, 255, 0.25), rgba(0, 0, 0, 0.6) 70%), var(--c2);
+    box-shadow:
+      0 0 18px var(--c),
+      inset 0 0 12px rgba(0, 0, 0, 0.8);
+    color: #fff;
+    text-shadow: 0 0 8px var(--c);
+  }
+  .pod .stone .cd {
+    position: absolute;
+    top: -6px;
+    right: -10px;
+  }
+  .pod .stone .burnb {
+    position: absolute;
+    bottom: -4px;
+    left: -10px;
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--ember);
+    background: #000a;
+    border-radius: 8px;
+    padding: 0 4px;
+    display: none;
+  }
+  .pod .label {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-shadow: 0 1px 3px #000;
+    white-space: nowrap;
+  }
+  .pod .bar {
+    width: 72px;
+    height: 8px;
+  }
+  .pod .bar > i {
+    background: linear-gradient(180deg, var(--c), var(--c2));
+  }
+  .pod[data-foe='left'] {
+    --c: #ff8a3c;
+    --c2: #6b2a10;
+  }
+  .pod[data-foe='right'] {
+    --c: #b07cff;
+    --c2: #35185e;
+  }
+  .pod.broken {
+    opacity: 0.25;
+    pointer-events: none;
+    filter: grayscale(1);
+  }
+  #vexaMark {
+    position: absolute;
+    left: 50%;
+    top: -60px;
+    width: 110px;
+    height: 120px;
+    margin-left: -55px;
+    pointer-events: auto;
+    cursor: pointer;
+    border-radius: 50%;
+  }
+  .reticle {
+    position: absolute;
+    inset: 0;
+    border: 2px dashed var(--gold);
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .pod.locked .stone {
+    outline: 2px dashed var(--gold);
+    outline-offset: 5px;
+  }
+  #vexaMark.locked .reticle {
+    opacity: 0.9;
+  }
+  .lockhint {
+    position: absolute;
+    bottom: 108px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 11px;
+    color: var(--gold);
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    text-shadow: 0 1px 3px #000;
+  }
+  /* combo */
+  #comboWrap {
+    height: 26px;
+    display: grid;
+    place-items: center;
+    position: relative;
+    z-index: 3;
+  }
+  #combo {
+    font-family: var(--display);
+    font-size: 24px;
+    color: var(--gold);
+    text-shadow:
+      0 0 12px var(--ember),
+      0 2px 3px #000;
+    opacity: 0;
+  }
+  /* board */
+  #boardWrap {
+    display: grid;
+    place-items: center;
+    padding: 0 max(8px, env(safe-area-inset-right, 0px)) 0 max(8px, env(safe-area-inset-left, 0px));
+  }
+  #board {
+    position: relative;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #0c0809;
+    box-shadow:
+      0 0 0 2px #3b2a1c,
+      0 0 0 5px #120c0d,
+      0 0 0 7px var(--bronze),
+      0 10px 30px #000;
+    touch-action: none;
+  }
+  #slots {
+    position: absolute;
+    inset: 0;
+    display: grid;
+  }
+  #slots div {
+    border: 1px solid rgba(185, 138, 75, 0.08);
+  }
+  #slots div:nth-child(odd) {
+    background: rgba(255, 235, 200, 0.035);
+  }
+  .tile {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: grid;
+    place-items: center;
+    will-change: transform;
+  }
+  .tile img {
+    width: 86%;
+    height: 86%;
+    object-fit: contain;
+    filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.7));
+    pointer-events: none;
+  }
+  .tile.sel img {
+    animation: sel 0.5s ease-in-out infinite alternate;
+  }
+  @keyframes sel {
+    from {
+      transform: scale(1);
+    }
+    to {
+      transform: scale(1.14);
+    }
+  }
+  .tile.skull img {
+    opacity: 0.85;
+  }
+  .die {
+    width: 78%;
+    height: 78%;
+    display: grid;
+    place-items: center;
+    clip-path: polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+    background: linear-gradient(160deg, #e2455a, #7a0f1f 70%);
+    font-family: var(--display);
+    color: var(--gold);
+    font-size: calc(var(--s) * 0.34px);
+    text-shadow: 0 1px 2px #000;
+    pointer-events: none;
+    animation: dieGlow 1.2s ease-in-out infinite alternate;
+  }
+  .die.r-blade {
+    background: linear-gradient(160deg, #dfe7f2, #3d4a63 70%);
+    color: #fff;
+  }
+  .die.r-ember {
+    background: linear-gradient(160deg, #ff9a4a, #7a1f08 70%);
+  }
+  .die.r-ward {
+    background: linear-gradient(160deg, #8cc2ff, #16346b 70%);
+  }
+  .die.r-vial {
+    background: linear-gradient(160deg, #8be89a, #145a2a 70%);
+  }
+  .die.adv {
+    background: linear-gradient(160deg, #ffe39a, #b07a1c 70%);
+    color: #3a1407;
+  }
+  .tile .dr,
+  .tdie .dr {
+    position: absolute;
+    right: 2%;
+    bottom: 2%;
+    width: 36%;
+    height: 36%;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 2px #000);
+    pointer-events: none;
+  }
+  .tdie {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    z-index: 6;
+  }
+  .tdie .die {
+    width: 100%;
+    height: 100%;
+    animation: none;
+  }
+  #aim {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 4px;
+    margin-top: -2px;
+    transform-origin: 0 50%;
+    background: repeating-linear-gradient(90deg, var(--gold) 0 9px, transparent 9px 15px);
+    filter: drop-shadow(0 0 4px var(--ember));
+    pointer-events: none;
+    z-index: 6;
+    opacity: 0;
+  }
+  .halo {
+    position: absolute;
+    inset: -6%;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 90, 110, 0.85) 0%, rgba(255, 60, 80, 0.35) 38%, transparent 66%);
+    animation: halo 1.1s ease-in-out infinite;
+    pointer-events: none;
+  }
+  .rays {
+    position: absolute;
+    inset: -18%;
+    border-radius: 50%;
+    background: repeating-conic-gradient(rgba(255, 225, 140, 0.55) 0 7deg, transparent 7deg 30deg);
+    -webkit-mask: radial-gradient(circle, #000 25%, transparent 68%);
+    mask: radial-gradient(circle, #000 25%, transparent 68%);
+    animation: spin 5s linear infinite;
+    pointer-events: none;
+  }
+  .tile.d20a .halo {
+    background: radial-gradient(circle, rgba(255, 235, 160, 0.95) 0%, rgba(255, 190, 70, 0.4) 40%, transparent 68%);
+    animation-duration: 0.8s;
+  }
+  @keyframes halo {
+    0%,
+    100% {
+      transform: scale(0.82);
+      opacity: 0.55;
+    }
+    50% {
+      transform: scale(1.12);
+      opacity: 1;
+    }
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes dieGlow {
+    to {
+      transform: scale(1.06);
+    }
+  }
+  .tile .die,
+  .tile .advb {
+    position: relative;
+  }
+  .tile .advb {
+    position: absolute;
+    bottom: 2px;
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--gold);
+    letter-spacing: 0.06em;
+    pointer-events: none;
+  }
+  /* party */
+  #hero {
+    padding: 8px max(10px, env(safe-area-inset-right, 0px)) 10px max(10px, env(safe-area-inset-left, 0px));
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .partyTop {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .heroName {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dim);
+    white-space: nowrap;
+  }
+  .armor {
+    color: var(--frost);
+    display: none;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+  #heroBar {
+    flex: 1;
+    min-width: 0;
+  }
+  #heroBar > i {
+    background: linear-gradient(180deg, #7fe08f, #2d8a44);
+  }
+  #party {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 7px;
+  }
+  .hc {
+    position: relative;
+    aspect-ratio: 1/1.08;
+    max-width: 100%;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 2px solid #4a3523;
+    background: #1c1310;
+    padding: 0;
+    cursor: pointer;
+    color: var(--ink);
+    font-family: var(--body);
+  }
+  .hc img.face {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 20%;
+    filter: grayscale(0.55) brightness(0.75);
+    transition: filter 0.3s;
+  }
+  .hc .fill {
+    position: absolute;
+    inset: 0;
+    transform-origin: 50% 100%;
+    transform: scaleY(0);
+    background: linear-gradient(0deg, var(--hc) 0%, transparent 100%);
+    opacity: 0.55;
+    transition: transform 0.45s ease;
+  }
+  .hc .nm {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 10px 2px 3px;
+    background: linear-gradient(0deg, rgba(10, 6, 7, 0.95), transparent);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    text-align: center;
+    line-height: 1.05;
+  }
+  .hc .nm small {
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    color: var(--dim);
+  }
+  .hc .rune {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(10, 6, 7, 0.75);
+    display: grid;
+    place-items: center;
+  }
+  .hc .rune img {
+    width: 17px;
+    height: 17px;
+  }
+  .hc .pct {
+    position: absolute;
+    top: 4px;
+    left: 5px;
+    font-size: 10px;
+    font-weight: 800;
+    text-shadow: 0 1px 2px #000;
+    font-variant-numeric: tabular-nums;
+  }
+  .hc.ready {
+    border-color: var(--gold);
+    box-shadow:
+      0 0 14px var(--hc),
+      0 0 0 1px var(--gold) inset;
+    animation: pulse 0.8s ease-in-out infinite alternate;
+  }
+  .hc.ready img.face {
+    filter: none;
+  }
+  .hc.ready .pct {
+    color: var(--gold);
+  }
+  .hc[data-h='kael'] {
+    --hc: #e8e2d0;
+  }
+  .hc[data-h='garran'] {
+    --hc: #6fb7ff;
+  }
+  .hc[data-h='mara'] {
+    --hc: #ff6a2b;
+  }
+  .hc[data-h='elin'] {
+    --hc: #5fd17a;
+  }
+  .hc:focus-visible,
+  .btn:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 3px;
+  }
+  #tools {
+    position: absolute;
+    top: 8px;
+    right: max(12px, env(safe-area-inset-right, 0px));
+    display: flex;
+    gap: 6px;
+    z-index: 4;
+  }
+  #tools button {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid rgba(242, 198, 109, 0.5);
+    background: rgba(0, 0, 0, 0.5);
+    color: var(--ink);
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .bossbar {
+    right: calc(max(12px, env(safe-area-inset-right, 0px)) + 108px);
+  }
+  /* fx */
+  #fx {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+    overflow: hidden;
+  }
+  .proj {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 40px;
+    height: 40px;
+    margin: -20px 0 0 -20px;
+  }
+  .float {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform: translate(-50%, -50%);
+    font-family: var(--display);
+    font-size: 26px;
+    white-space: nowrap;
+    text-shadow:
+      0 0 8px #000,
+      0 2px 2px #000;
+  }
+  .float.dmg {
+    color: #fff;
+  }
+  .float.crit {
+    color: var(--gold);
+    font-size: 38px;
+  }
+  .float.hurt {
+    color: #ff5a6a;
+  }
+  .float.heal {
+    color: var(--heal);
+  }
+  .float.armor {
+    color: var(--frost);
+  }
+  .float.burn {
+    color: var(--ember);
+    font-size: 20px;
+  }
+  #banner {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 34%;
+    text-align: center;
+    font-family: var(--display);
+    font-size: 34px;
+    color: var(--gold);
+    text-shadow:
+      0 0 18px var(--ember),
+      0 3px 4px #000;
+    opacity: 0;
+    z-index: 6;
+    pointer-events: none;
+    padding: 0 16px;
+  }
+  #banner small {
+    display: block;
+    font-family: var(--body);
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  #redFlash {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle, transparent 40%, rgba(195, 40, 58, 0.7));
+    opacity: 0;
+    pointer-events: none;
+    z-index: 5;
+  }
+  /* particles + cut-in */
+  #pfx {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 6;
+    max-width: none;
+  }
+  #cutin {
+    position: absolute;
+    inset: 0;
+    z-index: 7;
+    pointer-events: none;
+    overflow: hidden;
+    opacity: 0;
+  }
+  #cutin .dim {
+    position: absolute;
+    inset: 0;
+    background: rgba(5, 3, 4, 0.62);
+  }
+  #cutin .band {
+    position: absolute;
+    left: -30%;
+    right: -30%;
+    top: 27%;
+    height: 31%;
+    transform: rotate(-11deg);
+    background: linear-gradient(90deg, var(--c2), var(--c1) 50%, var(--c2));
+    overflow: hidden;
+    box-shadow:
+      0 0 50px var(--c1),
+      0 0 0 3px rgba(255, 255, 255, 0.6);
+  }
+  #cutin .lines {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -100%;
+    width: 300%;
+    background: repeating-linear-gradient(
+      90deg,
+      transparent 0 37px,
+      rgba(255, 255, 255, 0.4) 37px 39px,
+      transparent 39px 83px,
+      rgba(255, 255, 255, 0.2) 83px 84px,
+      transparent 84px 131px
+    );
+    opacity: 0.8;
+  }
+  #cutin img.hero {
+    position: absolute;
+    left: 50%;
+    top: 15%;
+    height: 44%;
+    width: auto;
+    max-width: none;
+    filter: drop-shadow(0 0 18px var(--c1)) drop-shadow(0 6px 6px #000);
+  }
+  #cutin .title {
+    position: absolute;
+    top: 63%;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-family: var(--display);
+    font-size: 42px;
+    line-height: 1;
+    color: #fff;
+    text-shadow:
+      0 0 18px var(--c1),
+      0 0 4px var(--c1),
+      0 3px 4px #000;
+  }
+  #cutin .who {
+    position: absolute;
+    top: calc(63% + 46px);
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink);
+    text-shadow: 0 1px 3px #000;
+  }
+  #cutin .flash {
+    position: absolute;
+    inset: 0;
+    background: #fff;
+    opacity: 0;
+  }
+  /* die roll */
+  #roll {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgba(10, 6, 7, 0.55);
+    z-index: 7;
+    opacity: 0;
+    pointer-events: none;
+  }
+  #roll .big {
+    width: 150px;
+    height: 150px;
+    display: grid;
+    place-items: center;
+    clip-path: polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+    background: linear-gradient(160deg, #e2455a, #7a0f1f 70%);
+    font-family: var(--display);
+    font-size: 64px;
+    color: var(--gold);
+    text-shadow: 0 2px 3px #000;
+  }
+  #roll .big.adv {
+    background: linear-gradient(160deg, #ffe39a, #b07a1c 70%);
+    color: #3a1407;
+  }
+  #roll .cap {
+    position: absolute;
+    top: calc(50% + 92px);
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-size: 14px;
+  }
+  /* cards */
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgba(10, 6, 7, 0.78);
+    z-index: 8;
+    padding: 16px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px));
+  }
+  .card {
+    width: 100%;
+    max-width: 360px;
+    border: 2px solid var(--bronze);
+    border-radius: 16px;
+    background: linear-gradient(180deg, #2a1b16, #140d0e);
+    box-shadow: 0 0 40px rgba(255, 106, 43, 0.25);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+  }
+  .card h1 {
+    margin: 0;
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 34px;
+    color: var(--gold);
+    text-wrap: balance;
+  }
+  .card .sub {
+    margin: -6px 0 0;
+    color: var(--dim);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 800;
+  }
+  .card ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: left;
+  }
+  .card li {
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: 10px;
+    align-items: center;
+    font-size: 14px;
+    line-height: 1.3;
+  }
+  .card li img,
+  .card li .mini {
+    width: 34px;
+    height: 34px;
+    object-fit: contain;
+  }
+  .card li .mini {
+    display: grid;
+    place-items: center;
+    clip-path: polygon(50% 0, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+    background: linear-gradient(160deg, #e2455a, #7a0f1f 70%);
+    color: var(--gold);
+    font-family: var(--display);
+    font-size: 13px;
+  }
+  .card li .mini.stone {
+    clip-path: none;
+    border-radius: 50%;
+    background: #35185e;
+    color: #fff;
+    border: 1px solid var(--hex);
+  }
+  .icons {
+    display: flex;
+    gap: 4px;
+  }
+  .icons img {
+    width: 24px;
+    height: 24px;
+  }
+  .btn {
+    font: 800 16px var(--body);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 12px;
+    border-radius: 12px;
+    border: 2px solid var(--gold);
+    background: linear-gradient(180deg, #ffd27a, #e0672a);
+    color: #2a0d05;
+    cursor: pointer;
+  }
+  .tier {
+    font-family: var(--display);
+    font-size: 20px;
+    color: var(--ink);
+  }
+  .stats {
+    color: var(--dim);
+    font-size: 14px;
+  }
+</style>
+
+<div id="app">
+  <div id="stage">
+    <img class="boss" src="{{vexa}}" alt="Vexa, the horned witch" />
+    <div id="bossFlash"></div>
+    <div class="shade"></div>
+    <div class="bossbar">
+      <div class="row">
+        <span class="name">Vexa</span><span class="chip warded" id="wardedChip">Warded −50%</span
+        ><span class="chip enraged" id="enragedChip" hidden>Enraged</span
+        ><span class="chip burn" id="vexaBurn" hidden></span>
+      </div>
+      <div class="bar" id="vexaBar"><b></b><i></i><span class="num"></span></div>
+      <div class="row">
+        <span class="cd" id="vexaCd">3</span><span class="intent" id="vexaIntent">Soul Lash hits the party for 18</span>
+      </div>
+    </div>
+    <div id="tools">
+      <button id="chargeBtn" aria-label="Charge the whole party (test)" title="Charge the party (test)">⚡</button
+      ><button id="muteBtn" aria-label="Sound on or off">♪</button
+      ><button id="restartBtn" aria-label="Restart fight">↻</button>
+    </div>
+    <div class="lockhint" id="lockhint">Tap a ward or Vexa to aim every rune at it</div>
+    <div id="lanes">
+      <div id="vexaMark" aria-label="Aim at Vexa"><div class="reticle"></div></div>
+      <div class="pod" data-foe="left" aria-label="Ash Ward">
+        <div class="stone">ᚦ<span class="cd">3</span><span class="burnb"></span></div>
+        <div class="bar"><b></b><i></i></div>
+        <div class="label">Ash Ward</div>
+      </div>
+      <div class="pod" data-foe="right" aria-label="Hex Ward">
+        <div class="stone">ᛉ<span class="cd">4</span><span class="burnb"></span></div>
+        <div class="bar"><b></b><i></i></div>
+        <div class="label">Hex Ward</div>
+      </div>
+    </div>
+  </div>
+  <div id="comboWrap"><div id="combo"></div></div>
+  <div id="boardWrap">
+    <div id="board"><div id="slots"></div></div>
+  </div>
+  <div id="hero">
+    <div class="partyTop">
+      <span class="heroName">Party</span>
+      <div class="bar" id="heroBar"><b></b><i></i><span class="num"></span></div>
+      <span class="armor" id="armor"></span>
+    </div>
+    <div id="party"></div>
+  </div>
+  <div id="redFlash"></div>
+  <div id="fx"></div>
+  <canvas id="pfx"></canvas>
+  <div id="aim"></div>
+  <div id="cutin">
+    <div class="dim"></div>
+    <div class="band"><div class="lines"></div></div>
+    <img class="hero" alt="" />
+    <div class="title"></div>
+    <div class="who"></div>
+    <div class="flash"></div>
+  </div>
+  <div id="banner"></div>
+  <div id="roll">
+    <div class="big">20</div>
+    <div class="cap"></div>
+  </div>
+  <div id="overlay"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+  (() => {
+    const COLS = 7,
+      ROWS = 6;
+    const WARDS = true; // build.py also writes a Vexa-alone version with this off
+    const MATCH = ['blade', 'ember', 'ward', 'vial', 'ruby'];
+    const IMG = {
+      blade: '{{blade}}',
+      ember: '{{ember}}',
+      ward: '{{ward}}',
+      vial: '{{vial}}',
+      ruby: '{{ruby}}',
+      skull: '{{skull}}',
+    };
+    // The party: each hero charges from one rune; rubies charge everyone. Tap a full portrait to use the power (free action).
+    const HEROES = [
+      {
+        id: 'kael',
+        name: 'Kael',
+        rune: 'blade',
+        power: 'Battle Focus',
+        face: '{{kael}}',
+        cut: '{{kael-cut}}',
+        c1: '#e9d9b8',
+        c2: '#5a1420',
+        text: 'Every blade on the board strikes ×1.5, then a crossing slash',
+      },
+      {
+        id: 'garran',
+        name: 'Garran',
+        rune: 'ward',
+        power: 'Shield Wall',
+        face: '{{garran}}',
+        cut: '{{garran-cut}}',
+        c1: '#79c0ff',
+        c2: '#0f2b52',
+        text: '+20 armor, every foe waits one more turn',
+      },
+      {
+        id: 'mara',
+        name: 'Mara',
+        rune: 'ember',
+        power: 'Fire Volley',
+        face: '{{mara}}',
+        cut: '{{mara-cut}}',
+        c1: '#ff7a2e',
+        c2: '#5a0f08',
+        text: '6 burning arrows, the last one hits double',
+      },
+      {
+        id: 'elin',
+        name: 'Elin',
+        rune: 'vial',
+        power: 'Mending Herbs',
+        face: '{{elin}}',
+        cut: '{{elin-cut}}',
+        c1: '#7fe08f',
+        c2: '#0f3a1c',
+        text: 'Heals 30 and turns every skull into a vial',
+      },
+    ];
+    // Rules (prototype numbers, tune by playing)
+    const N = {
+      heroHp: 140,
+      blade: 9,
+      ember: 6,
+      ruby: 4,
+      charge: 7,
+      rubyCharge: 4,
+      ward: 2,
+      armorCap: 20,
+      wallArmor: 20,
+      vial: 2,
+      volley: 6,
+      volleyDmg: 14,
+      herbs: 30,
+      burnPerStack: 4,
+      comboStep: 0.25,
+      wardShield: 0.25,
+      focusMult: 1.5,
+      dieMult: 4,
+      dieCrit: 120,
+      dieFumble: 8,
+      dieBonus: 2,
+      dieDC: 12,
+      foes: {
+        left: { name: 'Ash Ward', hp: 140, every: 3, dmg: 14 },
+        vexa: WARDS
+          ? { name: 'Vexa', hp: 1000, every: 3, dmg: 18, rageEvery: 2, rageDmg: 22 }
+          : { name: 'Vexa', hp: 1700, every: 2, dmg: 32, rageEvery: 1, rageDmg: 40, curse: 3, rageCurse: 4 }, // alone: she alternates Soul Lash and Hex
+        right: { name: 'Hex Ward', hp: 140, every: 3, curse: 3 },
+      },
+    };
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) gsap.globalTimeline.timeScale(3);
+
+    const $ = (s) => document.querySelector(s);
+    const app = $('#app'),
+      board = $('#board'),
+      slots = $('#slots'),
+      fx = $('#fx');
+    const pods = { left: $('.pod[data-foe=left]'), right: $('.pod[data-foe=right]'), vexa: $('#vexaMark') };
+    let S,
+      grid,
+      s = 56,
+      uid = 0,
+      sel = null,
+      muted = false;
+
+    /* ---------- sound (tiny synth) ---------- */
+    let ac = null;
+    function audio() {
+      if (!ac) {
+        try {
+          ac = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {}
+      }
+      if (ac && ac.state === 'suspended') ac.resume();
+    }
+    function tone(f, d = 0.12, type = 'triangle', v = 0.12, slide = 0) {
+      if (muted || !ac) return;
+      const t = ac.currentTime,
+        o = ac.createOscillator(),
+        g = ac.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f, t);
+      if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f * slide), t + d);
+      g.gain.setValueAtTime(v, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g).connect(ac.destination);
+      o.start(t);
+      o.stop(t + d);
+    }
+    function thud(v = 0.25) {
+      if (muted || !ac) return;
+      const t = ac.currentTime,
+        len = 0.18,
+        b = ac.createBuffer(1, ac.sampleRate * len, ac.sampleRate),
+        d = b.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+      const src = ac.createBufferSource(),
+        g = ac.createGain(),
+        f = ac.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = 900;
+      src.buffer = b;
+      g.gain.value = v;
+      src.connect(f).connect(g).connect(ac.destination);
+      src.start(t);
+      tone(70, 0.2, 'sine', v * 0.8, 0.5);
+    }
+
+    /* ---------- helpers ---------- */
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms / (reduce ? 3 : 1)));
+    const tw = (t, v) => new Promise((r) => gsap.to(t, { ...v, onComplete: r }));
+    const rnd = (n) => Math.floor(Math.random() * n);
+    const type = (r, c) => (r >= 0 && r < ROWS && c >= 0 && c < COLS && grid[r][c] ? grid[r][c].type : null);
+    const key = (r, c) => r * COLS + c;
+    const rc = (k) => [Math.floor(k / COLS), k % COLS];
+    function appXY(el) {
+      const a = app.getBoundingClientRect(),
+        b = el.getBoundingClientRect();
+      return [b.left - a.left + b.width / 2, b.top - a.top + b.height / 2];
+    }
+    function cellXY(r, c) {
+      const a = app.getBoundingClientRect(),
+        b = board.getBoundingClientRect();
+      return [b.left - a.left + (c + 0.5) * s, b.top - a.top + (r + 0.5) * s];
+    }
+
+    /* ---------- board ---------- */
+    function dieHTML(t, rune, size) {
+      return `<div class="die r-${rune} ${t === 'd20a' ? 'adv' : ''}" style="--s:${size}"><span class="dn">20</span></div><img class="dr" src="${IMG[rune]}" alt="">`;
+    }
+    function makeTile(t, r, c, rune = 'ruby') {
+      const el = document.createElement('div');
+      el.className = 'tile ' + t;
+      el.style.width = el.style.height = s + 'px';
+      if (t === 'd20' || t === 'd20a') {
+        el.innerHTML =
+          (t === 'd20a' ? '<div class="rays"></div>' : '') +
+          '<div class="halo"></div>' +
+          dieHTML(t, rune, s) +
+          (t === 'd20a' ? '<span class="advb">ADV</span>' : '');
+      } else el.innerHTML = `<img src="${IMG[t]}" alt="">`;
+      board.appendChild(el);
+      gsap.set(el, { x: c * s, y: r * s });
+      return { id: ++uid, type: t, el, rune };
+    }
+    function pickType(r, c) {
+      for (let i = 0; i < 20; i++) {
+        const t = MATCH[rnd(5)];
+        if (type(r, c - 1) === t && type(r, c - 2) === t) continue;
+        if (type(r - 1, c) === t && type(r - 2, c) === t) continue;
+        return t;
+      }
+      return MATCH[rnd(5)];
+    }
+    function buildBoard() {
+      board.querySelectorAll('.tile').forEach((e) => e.remove());
+      grid = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+      do {
+        for (let r = 0; r < ROWS; r++)
+          for (let c = 0; c < COLS; c++) {
+            if (grid[r][c]) grid[r][c].el.remove();
+            grid[r][c] = null;
+            grid[r][c] = makeTile(pickType(r, c), r, c);
+          }
+      } while (!hasMoves());
+      gsap.set(board.querySelectorAll('.tile'), { opacity: 0 });
+    }
+    // rune landing: squash from the bottom, spring back, a puff of its colour after a long fall
+    function land(el, dist, t, r, c) {
+      gsap
+        .timeline()
+        .set(el, { transformOrigin: '50% 100%' })
+        .to(el, { scaleY: 0.78, scaleX: 1.16, duration: 0.07, ease: 'power1.out' })
+        .to(el, { scaleY: 1, scaleX: 1, duration: 0.45, ease: 'elastic.out(1,0.35)' })
+        .set(el, { transformOrigin: '50% 50%' });
+      if (dist >= 1.5 && COL[t]) {
+        const [x, y] = cellXY(r, c),
+          C = COL[t];
+        for (let i = 0; i < 4; i++)
+          emit({
+            x: x + (Math.random() - 0.5) * s * 0.7,
+            y: y + s * 0.4,
+            vx: (Math.random() - 0.5) * 2.2,
+            vy: -0.6 - Math.random() * 0.8,
+            drag: 0.9,
+            decay: 0.06,
+            size: 1.5 + Math.random() * 2,
+            col: C[i % C.length],
+          });
+      }
+    }
+    // a falling rune: gravity (slow start, fast end), stretched while it falls
+    function fall(el, toY, dist, delay) {
+      const dur = 0.13 + Math.sqrt(Math.max(0.2, dist)) * 0.12;
+      gsap.fromTo(
+        el,
+        { scaleY: 1, scaleX: 1 },
+        { scaleY: 1.08, scaleX: 0.95, duration: dur * 0.6, delay, ease: 'power1.in' },
+      );
+      return tw(el, { y: toY, duration: dur, delay, ease: 'power2.in' });
+    }
+    // the board deals in: slots light up from the middle, a gold line runs over the top, then the runes rain in column by column
+    async function dealBoard() {
+      const slotEls = [...slots.children];
+      gsap.fromTo(
+        slotEls,
+        { opacity: 0, scale: 0.4 },
+        {
+          opacity: 1,
+          scale: 1,
+          duration: 0.35,
+          ease: 'back.out(2)',
+          stagger: { each: 0.012, grid: [ROWS, COLS], from: 'center' },
+        },
+      );
+      const b = board.getBoundingClientRect(),
+        a = app.getBoundingClientRect();
+      setTimeout(
+        () =>
+          slash(
+            b.left - a.left,
+            b.top - a.top + 2,
+            b.right - a.left,
+            b.top - a.top + 2,
+            0,
+            0.45,
+            0.35,
+            'rgba(255,190,90,0.55)',
+            true,
+          ),
+        150,
+      );
+      tone(196, 0.5, 'triangle', 0.06, 2);
+      await wait(320);
+      const jobs = [];
+      for (let c = 0; c < COLS; c++)
+        for (let r = ROWS - 1; r >= 0; r--) {
+          const t = grid[r][c],
+            start = -s * (1.2 + (ROWS - 1 - r) * 1.15),
+            delay = c * 0.06 + (ROWS - 1 - r) * 0.05;
+          gsap.set(t.el, { y: start, opacity: 1 });
+          jobs.push(
+            fall(t.el, r * s, (r * s - start) / s, delay).then(() => {
+              land(t.el, 2, t.type, r, c);
+              if (r === 0) tone(330 + c * 40, 0.05, 'sine', 0.05);
+            }),
+          );
+        }
+      await Promise.all(jobs);
+    }
+    function layout() {
+      const w = Math.min(app.clientWidth - 16, 456);
+      s = Math.floor(w / COLS);
+      const room = app.clientHeight - 26 - $('#hero').offsetHeight - 170;
+      if (room < s * ROWS) s = Math.max(36, Math.floor(room / ROWS));
+      board.style.width = s * COLS + 'px';
+      board.style.height = s * ROWS + 'px';
+      slots.style.gridTemplateColumns = `repeat(${COLS},1fr)`;
+      if (!slots.children.length)
+        for (let i = 0; i < COLS * ROWS; i++) slots.appendChild(document.createElement('div'));
+      const lanes = $('#lanes');
+      lanes.style.width = s * COLS + 'px';
+      lanes.style.marginLeft = -(s * COLS) / 2 + 'px';
+      pods.left.style.left = s * 1 + 'px';
+      pods.right.style.left = s * 6 + 'px';
+      if (grid)
+        for (let r = 0; r < ROWS; r++)
+          for (let c = 0; c < COLS; c++) {
+            const t = grid[r][c];
+            if (t) {
+              t.el.style.width = t.el.style.height = s + 'px';
+              gsap.set(t.el, { x: c * s, y: r * s });
+              const d = t.el.querySelector('.die');
+              if (d) d.style.setProperty('--s', s);
+            }
+          }
+    }
+
+    function findGroups() {
+      const runs = [];
+      for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS;) {
+          const t = type(r, c);
+          let e = c + 1;
+          if (MATCH.includes(t)) while (e < COLS && type(r, e) === t) e++;
+          if (MATCH.includes(t) && e - c >= 3)
+            runs.push({ t, cells: Array.from({ length: e - c }, (_, i) => key(r, c + i)) });
+          c = e;
+        }
+      for (let c = 0; c < COLS; c++)
+        for (let r = 0; r < ROWS;) {
+          const t = type(r, c);
+          let e = r + 1;
+          if (MATCH.includes(t)) while (e < ROWS && type(e, c) === t) e++;
+          if (MATCH.includes(t) && e - r >= 3)
+            runs.push({ t, cells: Array.from({ length: e - r }, (_, i) => key(r + i, c)) });
+          r = e;
+        }
+      const p = runs.map((_, i) => i),
+        f = (i) => (p[i] === i ? i : (p[i] = f(p[i]))),
+        owner = {};
+      runs.forEach((run, i) =>
+        run.cells.forEach((k) => {
+          if (owner[k] != null) p[f(i)] = f(owner[k]);
+          else owner[k] = i;
+        }),
+      );
+      const g = {};
+      runs.forEach((run, i) => {
+        const root = f(i);
+        g[root] = g[root] || { t: run.t, cells: new Set(), maxRun: 0, longest: null };
+        run.cells.forEach((k) => g[root].cells.add(k));
+        if (run.cells.length > g[root].maxRun) {
+          g[root].maxRun = run.cells.length;
+          g[root].longest = run.cells;
+        }
+      });
+      return Object.values(g).map((x) => ({ ...x, cells: [...x.cells] }));
+    }
+    function swapData(a, b) {
+      const [r1, c1] = rc(a),
+        [r2, c2] = rc(b);
+      const t = grid[r1][c1];
+      grid[r1][c1] = grid[r2][c2];
+      grid[r2][c2] = t;
+    }
+    function hasMoves() {
+      for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS; c++) {
+          const t = type(r, c);
+          if (t === 'd20' || t === 'd20a') return true;
+        }
+      for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS; c++)
+          for (const [dr, dc] of [
+            [0, 1],
+            [1, 0],
+          ]) {
+            const r2 = r + dr,
+              c2 = c + dc;
+            if (r2 >= ROWS || c2 >= COLS) continue;
+            if (!MATCH.includes(type(r, c)) && !MATCH.includes(type(r2, c2))) continue;
+            swapData(key(r, c), key(r2, c2));
+            const ok = findGroups().length > 0;
+            swapData(key(r, c), key(r2, c2));
+            if (ok) return true;
+          }
+      return false;
+    }
+    async function reshuffle() {
+      banner('No moves', 'The runes reshape');
+      await wait(600);
+      do {
+        for (let r = 0; r < ROWS; r++)
+          for (let c = 0; c < COLS; c++) {
+            const t = grid[r][c];
+            if (t && MATCH.includes(t.type)) {
+              const nt = pickType(r, c);
+              if (nt !== t.type) {
+                t.el.remove();
+                grid[r][c] = makeTile(nt, r, c);
+                gsap.from(grid[r][c].el, { scale: 0, duration: 0.3, delay: Math.random() * 0.2 });
+              }
+            }
+          }
+      } while (!hasMoves() || findGroups().length);
+      await wait(400);
+    }
+
+    async function collapse() {
+      const jobs = [];
+      for (let c = 0; c < COLS; c++) {
+        let w = ROWS - 1,
+          order = 0;
+        for (let r = ROWS - 1; r >= 0; r--)
+          if (grid[r][c]) {
+            if (w !== r) {
+              const t = grid[r][c];
+              grid[w][c] = t;
+              grid[r][c] = null;
+              jobs.push({ t, r: w, c, dist: w - r, order: order++ });
+            }
+            w--;
+          }
+        for (let r = w; r >= 0; r--) {
+          // new runes wait just above the board (it clips them) in a loose stack
+          const t = makeTile(MATCH[rnd(5)], r, c),
+            startY = (r - w - 1) * s * 1.12 - s * 0.15;
+          gsap.set(t.el, { y: startY });
+          grid[r][c] = t;
+          jobs.push({ t, r, c, dist: (r * s - startY) / s, order: order++ });
+        }
+      }
+      if (!jobs.length) return;
+      const landed = new Set();
+      await Promise.all(
+        jobs.map((j) =>
+          fall(j.t.el, j.r * s, j.dist, j.order * 0.035 + j.c * 0.012).then(() => {
+            land(j.t.el, j.dist, j.t.type, j.r, j.c);
+            if (!landed.has(j.c)) {
+              landed.add(j.c);
+              tone(200 + j.c * 25, 0.05, 'sine', 0.04);
+            }
+          }),
+        ),
+      );
+      await wait(90);
+    }
+
+    /* ---------- targets ---------- */
+    function zone(c) {
+      if (S.lock && S.foes[S.lock].alive) return S.lock;
+      const z = c <= 1 ? 'left' : c >= 5 ? 'right' : 'vexa';
+      return S.foes[z].alive ? z : 'vexa';
+    }
+    function wardsUp() {
+      return (S.foes.left.alive ? 1 : 0) + (S.foes.right.alive ? 1 : 0);
+    }
+    function foeXY(k) {
+      if (k === 'vexa') {
+        const [x, y] = appXY(pods.vexa);
+        return [x, y];
+      }
+      return appXY(pods[k].querySelector('.stone'));
+    }
+    function float(text, cls, x, y) {
+      const el = document.createElement('div');
+      el.className = 'float ' + cls;
+      el.textContent = text;
+      fx.appendChild(el);
+      gsap.set(el, { x: x + (Math.random() * 30 - 15), y });
+      gsap.fromTo(el, { scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.18, ease: 'back.out(2)' });
+      gsap.to(el, {
+        y: y - 46,
+        opacity: 0,
+        duration: 0.7,
+        delay: 0.45,
+        ease: 'power1.in',
+        onComplete: () => el.remove(),
+      });
+    }
+    function hit(k, amt, cls = 'dmg') {
+      let f = S.foes[k];
+      if (!f.alive) {
+        k = 'vexa';
+        f = S.foes.vexa;
+      }
+      if (k === 'vexa') amt *= 1 - N.wardShield * wardsUp();
+      amt = Math.max(1, Math.round(amt));
+      f.hp = Math.max(0, f.hp - amt);
+      const [x, y] = foeXY(k);
+      float(amt, cls, x, y - 10);
+      const tgt = k === 'vexa' ? $('#stage .boss') : pods[k].querySelector('.stone');
+      gsap.fromTo(tgt, { x: -5 }, { x: 0, duration: 0.25, ease: 'elastic.out(1,.3)' });
+      if (k === 'vexa') gsap.fromTo('#bossFlash', { opacity: 0.55 }, { opacity: 0, duration: 0.3 });
+      thud(cls === 'crit' ? 0.4 : 0.18);
+      if (f.hp <= 0 && k !== 'vexa') breakWard(k);
+      if (k === 'vexa' && !f.enraged && f.hp > 0 && f.hp <= f.max / 2) {
+        f.enraged = true;
+        f.every = N.foes.vexa.rageEvery;
+        f.cd = Math.min(f.cd, f.every);
+        S.queue.push(['Vexa enraged', 'She strikes every 2 turns']);
+      }
+      render();
+    }
+    function breakWard(k) {
+      const f = S.foes[k];
+      f.alive = false;
+      f.burn = 0;
+      if (S.lock === k) S.lock = null;
+      const v = S.foes.vexa;
+      v.cd += 1;
+      gsap.fromTo(pods[k].querySelector('.stone'), { scale: 1.4 }, { scale: 1, duration: 0.5, ease: 'power2.out' });
+      pods[k].classList.add('broken');
+      S.queue.push([f.name + ' shattered', 'Vexa is exposed · her next attack is delayed']);
+      tone(880, 0.4, 'sawtooth', 0.08, 0.3);
+    }
+    async function flushBanners() {
+      while (S.queue.length) {
+        const [a, b] = S.queue.shift();
+        banner(a, b);
+        await wait(1100);
+      }
+    }
+    function banner(a, b = '') {
+      const el = $('#banner');
+      el.innerHTML = a + (b ? `<small>${b}</small>` : '');
+      gsap.killTweensOf(el);
+      gsap.fromTo(el, { opacity: 0, scale: 1.3 }, { opacity: 1, scale: 1, duration: 0.25, ease: 'back.out(2)' });
+      gsap.to(el, { opacity: 0, duration: 0.3, delay: 1 });
+    }
+    function showCombo(n, m) {
+      const el = $('#combo');
+      el.textContent = `Combo ${n} · ×${m.toFixed(2).replace(/0$/, '')}`;
+      gsap.killTweensOf(el);
+      gsap.fromTo(el, { opacity: 1, scale: 1.5 }, { scale: 1, duration: 0.25, ease: 'back.out(3)' });
+      gsap.to(el, { opacity: 0, duration: 0.4, delay: 0.9 });
+      tone(440 * Math.pow(1.12, n), 0.15, 'triangle', 0.1);
+    }
+
+    /* ---------- striking ---------- */
+    async function strike(cells, m, groups = [], opts = {}) {
+      const heroEl = $('#heroBar');
+      const byZone = {},
+        burns = {};
+      let heal = 0,
+        armor = 0;
+      const charge = {};
+      const flights = [],
+        ks = opts.combo ? 1 + 0.35 * (opts.combo - 1) : 1;
+      if (!opts.steel) for (const g of groups) runLine(g);
+      if (opts.combo >= 3 && !reduce)
+        gsap.fromTo(app, { x: -3 * opts.combo }, { x: 0, duration: 0.45, ease: 'elastic.out(1,.3)' });
+      for (const k of cells) {
+        const [r, c] = rc(k),
+          t = type(r, c);
+        if (!t || t === 'd20' || t === 'd20a') continue;
+        const [x, y] = cellXY(r, c);
+        if (t === 'skull') {
+          const el = grid[r][c].el;
+          gsap.to(el, { scale: 1.4, opacity: 0, duration: 0.25 });
+          continue;
+        }
+        if (t === 'ruby') HEROES.forEach((h) => (charge[h.id] = (charge[h.id] || 0) + N.rubyCharge));
+        else {
+          const h = HEROES.find((x) => x.rune === t);
+          charge[h.id] = (charge[h.id] || 0) + N.charge;
+        }
+        let dest;
+        if (t === 'blade' || t === 'ember' || t === 'ruby') {
+          const z = zone(c);
+          byZone[z] = (byZone[z] || 0) + N[t] * m;
+          dest = foeXY(z);
+        } else if (t === 'vial') {
+          heal += N.vial * m;
+          dest = appXY(heroEl);
+        } else if (t === 'ward') {
+          armor += N.ward * m;
+          dest = appXY(heroEl);
+        }
+        breakFx(t, x, y, ks);
+        const p = document.createElement('img');
+        p.className = 'proj';
+        p.src = IMG[t];
+        fx.appendChild(p);
+        if (opts.steel) {
+          const z = s * 0.86 * 1.3;
+          p.style.width = p.style.height = z + 'px';
+          p.style.margin = `${-z / 2}px 0 0 ${-z / 2}px`;
+        }
+        gsap.set(p, { x, y });
+        grid[r][c].el.style.opacity = 0;
+        if (opts.steel) {
+          // Battle Focus: blades spin up through a steel-light trail
+          const dx = dest[0] + (Math.random() * 40 - 20),
+            dy = dest[1] + (Math.random() * 30 - 15);
+          const d0 = flights.length * 0.05;
+          gsap.to(p, { rotation: 540, duration: 0.5, delay: d0 * 0.4, ease: 'power2.in' });
+          flights.push(
+            tw(p, {
+              x: dx,
+              y: dy,
+              rotation: '+=1080',
+              duration: 0.42 + Math.random() * 0.12,
+              ease: 'power3.in',
+              delay: 0.5 + d0,
+              onUpdate: () => {
+                const qx = gsap.getProperty(p, 'x'),
+                  qy = gsap.getProperty(p, 'y');
+                for (let j = 0; j < 2; j++)
+                  emit({
+                    x: qx,
+                    y: qy,
+                    vx: Math.random() - 0.5,
+                    vy: Math.random() - 0.5,
+                    drag: 0.92,
+                    decay: 0.06,
+                    size: 3 + Math.random() * 4,
+                    col: STEEL[rnd(3)],
+                  });
+              },
+            }).then(() => {
+              p.remove();
+              sparks(dx, dy, 14);
+              tone(1200 + rnd(400), 0.05, 'square', 0.03);
+            }),
+          );
+        } else {
+          const tc = COL[t];
+          flights.push(
+            tw(p, {
+              x: dest[0],
+              y: dest[1],
+              scale: 0.55,
+              duration: 0.32 + Math.random() * 0.1,
+              ease: 'power2.in',
+              delay: flights.length * 0.015,
+              onUpdate: () =>
+                emit({
+                  x: gsap.getProperty(p, 'x'),
+                  y: gsap.getProperty(p, 'y'),
+                  vx: Math.random() - 0.5,
+                  vy: Math.random() - 0.5,
+                  drag: 0.9,
+                  decay: 0.06,
+                  size: 2 + Math.random() * 3 * ks,
+                  col: tc[rnd(tc.length)],
+                }),
+            }).then(() => {
+              p.remove();
+              if (t !== 'vial' && t !== 'ward') impactFx(t, dest[0], dest[1], ks);
+            }),
+          );
+        }
+      }
+      for (const g of groups)
+        if (g.t === 'ember') {
+          const z = zone(rc(g.cells[0])[1]);
+          burns[z] = (burns[z] || 0) + 1;
+        }
+      tone(520, 0.08, 'square', 0.04);
+      await Promise.all(flights);
+      if (opts.finale) await opts.finale(Object.keys(byZone));
+      for (const z in byZone) hit(z, byZone[z], m >= 2 ? 'crit' : 'dmg');
+      for (const z in burns) {
+        const f = S.foes[S.foes[z].alive ? z : 'vexa'];
+        if (f.alive) f.burn += burns[z];
+      }
+      if (heal) {
+        const real = Math.min(Math.round(heal), S.maxHp - S.hp);
+        S.hp += real;
+        const [x, y] = appXY(heroEl);
+        float('+' + Math.round(heal), 'heal', x, y - 16);
+      }
+      if (armor) {
+        const before = S.armor;
+        S.armor = Math.min(N.armorCap, S.armor + Math.round(armor));
+        const [x, y] = appXY(heroEl);
+        float('+' + (S.armor - before) + ' armor', 'armor', x + 40, y - 16);
+      }
+      for (const id in charge) S.charge[id] = Math.min(100, S.charge[id] + charge[id]);
+      render();
+    }
+    // matching: each group squeezes into one ball of light, then the light flies to its target
+    async function strikeGroups(groups, extra, m, combo, spawns) {
+      const ks = 1 + 0.35 * (combo - 1);
+      if (combo >= 3 && !reduce)
+        gsap.fromTo(app, { x: -3 * combo }, { x: 0, duration: 0.45, ease: 'elastic.out(1,.3)' });
+      for (const k of extra) {
+        const [r, c] = rc(k);
+        if (type(r, c) === 'skull') {
+          const [x, y] = cellXY(r, c),
+            el = grid[r][c].el;
+          breakFx('skull', x, y, 1);
+          grid[r][c] = null;
+          gsap.to(el, { scale: 1.4, opacity: 0, duration: 0.25, onComplete: () => el.remove() });
+        }
+      }
+      tone(520, 0.08, 'square', 0.04);
+      await Promise.all(
+        groups.map((g, gi) =>
+          orbGroup(
+            g,
+            gi,
+            m,
+            ks,
+            spawns.find((sp) => g.cells.includes(sp[0])),
+          ),
+        ),
+      );
+      render();
+    }
+    async function orbGroup(g, gi, m, ks, spawn) {
+      const t = g.t,
+        n = g.cells.length,
+        C = COL[t],
+        heroEl = $('#heroBar');
+      let ar, ac;
+      if (spawn) [ar, ac] = rc(spawn[0]);
+      else {
+        ar = 0;
+        ac = 0;
+        for (const k of g.cells) {
+          const [r, c] = rc(k);
+          ar += r / n;
+          ac += c / n;
+        }
+      }
+      const [ox, oy] = cellXY(ar, ac);
+      runLine(g);
+      await wait(gi * 70);
+      // 1. squeeze: the runes slide into the gather point, light streams with them
+      const els = g.cells.map((k) => {
+        const [r, c] = rc(k),
+          el = grid[r][c].el,
+          [x, y] = cellXY(r, c);
+        grid[r][c] = null;
+        for (let i = 0; i < 5; i++)
+          emit({
+            x: x + Math.random() * 14 - 7,
+            y: y + Math.random() * 14 - 7,
+            vx: (ox - x) / 12,
+            vy: (oy - y) / 12,
+            drag: 0.9,
+            decay: 0.05,
+            size: 2 + Math.random() * 3,
+            col: C[i % C.length],
+          });
+        return el;
+      });
+      await Promise.all(
+        els.map((el) =>
+          tw(el, { x: ac * s, y: ar * s, scale: 0.3, opacity: 0, duration: 0.24, ease: 'power2.in' }).then(() =>
+            el.remove(),
+          ),
+        ),
+      );
+      // 2. the light is born
+      const orb = { x: ox, y: oy, r: 0, col: C[0], seed: Math.random() * 6 };
+      orbs.push(orb);
+      kick();
+      ring(ox, oy, C[C.length > 2 ? 2 : 0], 2.5, 8);
+      tone(420 + gi * 90, 0.14, 'sine', 0.08, 1.7);
+      await tw(orb, { r: s * (0.16 + 0.03 * n) * Math.min(1.5, ks), duration: 0.18, ease: 'back.out(3)' });
+      if (spawn) {
+        // 4 and 5: hold, then the d20 forms where the runes met
+        await wait(260);
+        const [r, c] = rc(spawn[0]),
+          gold = spawn[1] === 'd20a';
+        grid[r][c] = makeTile(spawn[1], r, c, spawn[2]);
+        gsap.from(grid[r][c].el, { scale: 0, rotation: -180, duration: 0.45, ease: 'back.out(2)' });
+        forgeFx(r, c, gold);
+        await wait(320);
+      } else await wait(80);
+      // 3. the light flies to its target
+      let dest, apply;
+      if (t === 'blade' || t === 'ember' || t === 'ruby') {
+        const z = zone(Math.round(ac));
+        dest = foeXY(z);
+        if (!WARDS) dest = [cellXY(0, ac)[0], dest[1] + (Math.random() * 40 - 20)];
+        apply = () => {
+          hit(z, N[t] * n * m, m >= 2 ? 'crit' : 'dmg');
+          if (t === 'ember') {
+            const f = S.foes[S.foes[z].alive ? z : 'vexa'];
+            if (f.alive) f.burn++;
+          }
+          impactFx(t, dest[0], dest[1], ks * 1.6);
+          ring(dest[0], dest[1], C[0], 3, 8);
+        };
+      } else if (t === 'vial') {
+        dest = appXY(heroEl);
+        apply = () => {
+          const h = N.vial * n * m,
+            real = Math.min(Math.round(h), S.maxHp - S.hp);
+          S.hp += real;
+          float('+' + Math.round(h), 'heal', dest[0], dest[1] - 16);
+          impactFx(t, dest[0], dest[1], ks);
+        };
+      } else {
+        dest = appXY(heroEl);
+        apply = () => {
+          const before = S.armor;
+          S.armor = Math.min(N.armorCap, S.armor + Math.round(N.ward * n * m));
+          float('+' + (S.armor - before) + ' armor', 'armor', dest[0] + 40, dest[1] - 16);
+          ring(dest[0], dest[1], 'rgba(170,215,255,1)', 3, 10);
+        };
+      }
+      const cx = (ox + dest[0]) / 2 + (Math.random() * 80 - 40),
+        cy = Math.min(oy, dest[1]) - (dest[1] < oy ? 40 : 60),
+        o = { t: 0 };
+      await tw(o, {
+        t: 1,
+        duration: 0.36,
+        ease: 'power2.in',
+        onUpdate: () => {
+          const u = 1 - o.t;
+          orb.x = u * u * ox + 2 * u * o.t * cx + o.t * o.t * dest[0];
+          orb.y = u * u * oy + 2 * u * o.t * cy + o.t * o.t * dest[1];
+          for (let i = 0; i < 2; i++)
+            emit({
+              x: orb.x,
+              y: orb.y,
+              vx: Math.random() - 0.5,
+              vy: Math.random() - 0.5,
+              drag: 0.9,
+              decay: 0.05,
+              size: orb.r * (0.4 + Math.random() * 0.5),
+              col: C[rnd(C.length)],
+            });
+        },
+      });
+      orbs.splice(orbs.indexOf(orb), 1);
+      if (t === 'ruby') HEROES.forEach((h) => (S.charge[h.id] = Math.min(100, S.charge[h.id] + N.rubyCharge * n)));
+      else {
+        const h = HEROES.find((x) => x.rune === t);
+        S.charge[h.id] = Math.min(100, S.charge[h.id] + N.charge * n);
+      }
+      apply();
+      render();
+    }
+    function removeCells(cells) {
+      for (const k of cells) {
+        const [r, c] = rc(k);
+        if (grid[r][c]) {
+          const el = grid[r][c].el;
+          gsap.to(el, { scale: 0, opacity: 0, duration: 0.15, onComplete: () => el.remove() });
+          grid[r][c] = null;
+        }
+      }
+    }
+
+    async function resolve(origin, mult = 1) {
+      let combo = 0;
+      while (!S.over) {
+        const groups = findGroups();
+        if (!groups.length) break;
+        combo++;
+        const m = (1 + N.comboStep * (combo - 1)) * mult;
+        mult = 1;
+        if (combo > 1) showCombo(combo, m);
+        const clear = new Set(),
+          spawns = [];
+        for (const g of groups) {
+          g.cells.forEach((k) => clear.add(k));
+          if (g.maxRun >= 4 || g.cells.length >= 5) {
+            const at =
+              origin != null && g.cells.includes(origin) ? origin : g.longest[Math.floor(g.longest.length / 2)];
+            spawns.push([at, g.maxRun >= 5 || g.cells.length >= 5 ? 'd20a' : 'd20', g.t]);
+          }
+        }
+        for (const k of [...clear]) {
+          const [r, c] = rc(k);
+          for (const [dr, dc] of [
+            [0, 1],
+            [0, -1],
+            [1, 0],
+            [-1, 0],
+          ])
+            if (type(r + dr, c + dc) === 'skull') clear.add(key(r + dr, c + dc));
+        }
+        const inGroups = new Set(groups.flatMap((g) => g.cells));
+        await strikeGroups(
+          groups,
+          [...clear].filter((k) => !inGroups.has(k)),
+          m,
+          combo,
+          spawns,
+        );
+        await wait(80);
+        await collapse();
+        origin = null;
+        await flushBanners();
+        if (checkEnd()) return;
+      }
+    }
+
+    /* ---------- enemy turn ---------- */
+    async function enemyTurn() {
+      for (const k of ['left', 'vexa', 'right']) {
+        const f = S.foes[k];
+        if (f.alive && f.burn > 0) {
+          hit(k, N.burnPerStack * f.burn, 'burn');
+          f.burn--;
+          render();
+          await wait(260);
+          if (checkEnd()) return;
+        }
+      }
+      await flushBanners();
+      for (const k of ['left', 'vexa', 'right']) {
+        const f = S.foes[k];
+        if (!f.alive || S.over) continue;
+        f.cd--;
+        render();
+        if (f.cd <= 0) {
+          await act(k);
+          f.cd = f.every;
+          render();
+          if (checkEnd()) return;
+        }
+      }
+    }
+    async function act(k) {
+      const vexaHex = k === 'vexa' && !WARDS && S.foes.vexa.next === 'hex';
+      if (k === 'vexa' && !WARDS) S.foes.vexa.next = vexaHex ? 'lash' : 'hex';
+      if (k === 'right' || vexaHex) {
+        const n = vexaHex ? (S.foes.vexa.enraged ? N.foes.vexa.rageCurse : N.foes.vexa.curse) : N.foes.right.curse;
+        banner(vexaHex ? 'Hex' : 'Hex Ward', `Curses ${n === 3 ? 'three' : 'four'} runes`);
+        const stone = vexaHex ? pods.vexa : pods.right.querySelector('.stone');
+        if (vexaHex) {
+          gsap.fromTo('#stage .boss', { scale: 1 }, { scale: 1.05, duration: 0.2, yoyo: true, repeat: 1 });
+          gsap.fromTo('#bossFlash', { opacity: 0.4 }, { opacity: 0, duration: 0.5 });
+        } else gsap.fromTo(stone, { scale: 1 }, { scale: 1.25, duration: 0.2, yoyo: true, repeat: 1 });
+        const pool = [];
+        for (let r = 0; r < ROWS; r++)
+          for (let c = 0; c < COLS; c++) if (MATCH.includes(type(r, c))) pool.push(key(r, c));
+        const picks = [];
+        for (let i = 0; i < n && pool.length; i++) picks.push(pool.splice(rnd(pool.length), 1)[0]);
+        const [sx, sy] = appXY(stone);
+        tone(180, 0.5, 'sawtooth', 0.06, 0.5);
+        await Promise.all(
+          picks.map((k2, i) => {
+            const [r, c] = rc(k2),
+              [x, y] = cellXY(r, c);
+            const p = document.createElement('img');
+            p.className = 'proj';
+            p.src = IMG.skull;
+            fx.appendChild(p);
+            gsap.set(p, { x: sx, y: sy, scale: 0.4 });
+            return tw(p, { x, y, scale: 1, duration: 0.45, delay: i * 0.08, ease: 'power2.inOut' }).then(() => {
+              p.remove();
+              grid[r][c].el.remove();
+              grid[r][c] = makeTile('skull', r, c);
+              gsap.from(grid[r][c].el, { scale: 1.6, opacity: 0, duration: 0.25 });
+            });
+          }),
+        );
+        await wait(350);
+        return;
+      }
+      const dmg = k === 'left' ? N.foes.left.dmg : S.foes.vexa.enraged ? N.foes.vexa.rageDmg : N.foes.vexa.dmg;
+      if (k === 'left') {
+        const stone = pods.left.querySelector('.stone');
+        await tw(stone, { y: 24, scale: 1.2, duration: 0.15, ease: 'power2.in' });
+        gsap.to(stone, { y: 0, scale: 1, duration: 0.3 });
+      } else {
+        banner(S.foes.vexa.enraged ? 'Soul Rend' : 'Soul Lash');
+        await tw('#stage .boss', { scale: 1.08, duration: 0.25, ease: 'power2.in' });
+        gsap.to('#stage .boss', { scale: 1, duration: 0.4 });
+      }
+      hurt(dmg);
+      await wait(450);
+    }
+    function hurt(n) {
+      const absorbed = Math.min(S.armor, n);
+      S.armor -= absorbed;
+      const real = n - absorbed;
+      S.hp = Math.max(0, S.hp - real);
+      const [x, y] = appXY($('#heroBar'));
+      float('−' + real, 'hurt', x, y - 18);
+      if (absorbed) float(absorbed + ' blocked', 'armor', x + 60, y - 30);
+      gsap.fromTo('#redFlash', { opacity: real ? 1 : 0.3 }, { opacity: 0, duration: 0.5 });
+      if (!reduce) gsap.fromTo(app, { x: -8 }, { x: 0, duration: 0.4, ease: 'elastic.out(1,.25)' });
+      thud(0.35);
+      render();
+    }
+
+    /* ---------- player actions ---------- */
+    async function playSwap(a, b) {
+      if (S.busy || S.over) return;
+      S.busy = true;
+      setSel(null);
+      const [r1, c1] = rc(a),
+        [r2, c2] = rc(b),
+        A = grid[r1][c1],
+        B = grid[r2][c2];
+      if ([A.type, B.type].some((t) => t === 'd20' || t === 'd20a')) {
+        S.busy = false;
+        const [dr, dc] = A.type.startsWith('d20') ? [r1, c1] : [r2, c2];
+        return rollDie(dr, dc);
+      }
+      tone(330, 0.05, 'sine', 0.05);
+      swapData(a, b);
+      await Promise.all([
+        tw(A.el, { x: c2 * s, y: r2 * s, duration: 0.16 }),
+        tw(B.el, { x: c1 * s, y: r1 * s, duration: 0.16 }),
+      ]);
+      if (!findGroups().length) {
+        swapData(a, b);
+        tone(140, 0.12, 'square', 0.05);
+        await Promise.all([
+          tw(A.el, { x: c1 * s, y: r1 * s, duration: 0.16 }),
+          tw(B.el, { x: c2 * s, y: r2 * s, duration: 0.16 }),
+        ]);
+        S.busy = false;
+        return;
+      }
+      S.moves++;
+      hideHint();
+      await resolve(b);
+      await afterMove(true);
+    }
+    async function afterMove(enemy) {
+      if (!S.over && enemy) await enemyTurn();
+      if (!S.over && !hasMoves()) await reshuffle();
+      render();
+      S.busy = false;
+      checkEnd();
+    }
+    // the d20: flick it at a target (or tap to throw at the foe above it); d20 + party bonus against a DC
+    const TIER = { crit: 'Natural 20 · critical', success: 'Success', fail: 'Fail', fumble: 'Natural 1 · fumble' };
+    function throwDieEl(t, rune, x, y) {
+      const el = document.createElement('div'),
+        z = s * 1.05;
+      el.className = 'tdie';
+      el.style.width = el.style.height = z + 'px';
+      el.innerHTML = dieHTML(t, rune, z);
+      fx.appendChild(el);
+      gsap.set(el, { x, y, xPercent: -50, yPercent: -50 });
+      return el;
+    }
+    async function flyDie(el, rune, x0, y0, x1, y1, i) {
+      const cx = (x0 + x1) / 2 + (i ? 30 : -30),
+        cy = Math.min(y0, y1) - 130 - i * 20,
+        o = { t: 0 },
+        num = el.querySelector('.dn'),
+        C = COL[rune] || FIRE;
+      let last = 0;
+      await tw(o, {
+        t: 1,
+        duration: 0.72,
+        delay: i * 0.08,
+        ease: 'power1.inOut',
+        onUpdate: () => {
+          const t = o.t,
+            u = 1 - t;
+          gsap.set(el, {
+            x: u * u * x0 + 2 * u * t * cx + t * t * x1,
+            y: u * u * y0 + 2 * u * t * cy + t * t * y1,
+            rotation: t * 1080,
+            scale: 1 + 0.55 * Math.sin(Math.PI * t),
+          });
+          const now = performance.now();
+          if (now - last > 55) {
+            last = now;
+            num.textContent = 1 + rnd(20);
+            tone(600 + rnd(400), 0.02, 'square', 0.02);
+          }
+          emit({
+            x: gsap.getProperty(el, 'x'),
+            y: gsap.getProperty(el, 'y'),
+            vx: Math.random() - 0.5,
+            vy: Math.random() - 0.5,
+            drag: 0.9,
+            decay: 0.05,
+            size: 3 + Math.random() * 3,
+            col: C[rnd(C.length)],
+          });
+        },
+      });
+      thud(0.25);
+      ring(x1, y1, 'rgba(255,220,160,1)', 2.5, 10);
+      await tw(el, {
+        keyframes: [
+          { y: y1 - 26, scaleY: 1.05, duration: 0.14, ease: 'power2.out' },
+          { y: y1, scaleY: 0.85, scaleX: 1.12, duration: 0.12, ease: 'power2.in' },
+          { scaleY: 1, scaleX: 1, duration: 0.3, ease: 'elastic.out(1,.4)' },
+        ],
+      });
+    }
+    function dieEffect(rune, tier, roll, target) {
+      if (tier === 'fumble') {
+        hurt(N.dieFumble);
+        const pool = [];
+        for (let r = 0; r < ROWS; r++)
+          for (let c = 0; c < COLS; c++) if (MATCH.includes(type(r, c))) pool.push(key(r, c));
+        for (let i = 0; i < 2 && pool.length; i++) {
+          const [r, c] = rc(pool.splice(rnd(pool.length), 1)[0]);
+          grid[r][c].el.remove();
+          grid[r][c] = makeTile('skull', r, c);
+          gsap.from(grid[r][c].el, { scale: 1.6, opacity: 0, duration: 0.3 });
+        }
+        return 'The die cracks: the party takes ' + N.dieFumble + ' and two runes turn to skulls';
+      }
+      const dmg = tier === 'fail' ? roll * 2 : tier === 'success' ? roll * N.dieMult : N.dieCrit;
+      hit(target, dmg, tier === 'crit' ? 'crit' : 'dmg');
+      if (tier === 'fail') return 'A glancing hit, no rune power';
+      const crit = tier === 'crit',
+        f = S.foes[S.foes[target].alive ? target : 'vexa'];
+      if (rune === 'blade') {
+        const extra = crit ? 2 : 1;
+        for (let i = 0; i < extra; i++)
+          setTimeout(
+            () => {
+              if (!S.over) {
+                hit(target, roll * 2, 'dmg');
+                render();
+                checkEnd();
+              }
+            },
+            220 * (i + 1),
+          );
+        return crit ? 'Steel die: two more strikes, and the row breaks' : 'Steel die: a second strike';
+      }
+      if (rune === 'ember') {
+        if (f.alive) f.burn += crit ? 4 : 2;
+        embersOn(target, crit ? 30 : 16);
+        return `Fire die: ${crit ? 4 : 2} burn` + (crit ? ', and the row breaks' : '');
+      }
+      if (rune === 'ruby') {
+        HEROES.forEach((h) => (S.charge[h.id] = crit ? 100 : Math.min(100, S.charge[h.id] + 25)));
+        return crit
+          ? 'Ruby die: the whole party is charged, and the row breaks'
+          : 'Ruby die: +25% charge to the whole party';
+      }
+      if (rune === 'ward') {
+        const add = crit ? 20 : 12;
+        S.armor = Math.min(N.armorCap + N.wallArmor, S.armor + add);
+        if (crit) for (const k in S.foes) if (S.foes[k].alive) S.foes[k].cd += 1;
+        return `Shield die: +${add} armor` + (crit ? ', every foe waits a turn, and the row breaks' : '');
+      }
+      if (rune === 'vial') {
+        const h = crit ? 50 : 20;
+        S.hp = Math.min(S.maxHp, S.hp + h);
+        if (crit)
+          for (let r = 0; r < ROWS; r++)
+            for (let c = 0; c < COLS; c++)
+              if (type(r, c) === 'skull') {
+                grid[r][c].el.remove();
+                grid[r][c] = makeTile('vial', r, c);
+              }
+        return `Vial die: heals ${h}` + (crit ? ', skulls bloom, and the row breaks' : '');
+      }
+      return '';
+    }
+    async function rollDie(r, c, target) {
+      if (S.busy || S.over) return;
+      S.busy = true;
+      setSel(null);
+      S.moves++;
+      hideHint();
+      const t = grid[r][c],
+        adv = t.type === 'd20a',
+        rune = t.rune || 'ruby';
+      target = target || zone(c);
+      if (!S.foes[target].alive) target = 'vexa';
+      const a = 1 + rnd(20),
+        b = 1 + rnd(20),
+        roll = adv ? Math.max(a, b) : a,
+        tot = roll + N.dieBonus;
+      const tier = roll === 20 ? 'crit' : roll === 1 ? 'fumble' : tot >= N.dieDC ? 'success' : 'fail';
+      const [x0, y0] = cellXY(r, c);
+      let [x1, y1] = foeXY(target);
+      if (!WARDS) x1 = Math.max(60, Math.min(app.clientWidth - 60, x0 * 0.5 + app.clientWidth * 0.25));
+      y1 += 12;
+      t.el.remove();
+      grid[r][c] = null;
+      const vals = adv ? [a, b] : [a],
+        els = vals.map(() => throwDieEl(t.type, rune, x0, y0));
+      tone(240, 0.5, 'sawtooth', 0.05, 3);
+      await Promise.all(els.map((el, i) => flyDie(el, rune, x0, y0, x1 + (adv ? (i ? 34 : -34) : 0), y1, i)));
+      els.forEach((el, i) => (el.querySelector('.dn').textContent = vals[i]));
+      if (adv) {
+        const lo = a >= b ? 1 : 0;
+        gsap.to(els[lo], { opacity: 0.25, scale: 0.7, duration: 0.3, delay: 0.25 });
+      }
+      const keep = els[adv && b > a ? 1 : 0];
+      gsap.fromTo(keep, { scale: 1.45 }, { scale: 1.15, duration: 0.35, ease: 'back.out(3)' });
+      tier === 'crit'
+        ? (tone(660, 0.5, 'triangle', 0.15, 2), tone(990, 0.6, 'triangle', 0.1, 1.5))
+        : tier === 'fumble'
+          ? tone(200, 0.5, 'sawtooth', 0.1, 0.4)
+          : tier === 'success'
+            ? tone(660, 0.25, 'triangle', 0.1, 1.3)
+            : tone(300, 0.2, 'triangle', 0.08);
+      await wait(adv ? 520 : 380);
+      const [kx, ky] = [gsap.getProperty(keep, 'x'), gsap.getProperty(keep, 'y')];
+      const text = dieEffect(rune, tier, roll, target);
+      banner(
+        TIER[tier],
+        `${adv ? `Advantage ${a} and ${b}, keep ${roll}` : roll} + ${N.dieBonus} party = ${tot} vs DC ${N.dieDC} · ${text}`,
+      );
+      if (tier === 'crit') {
+        burst(kx, ky, true);
+        gsap.fromTo('#bossFlash', { opacity: 1 }, { opacity: 0, duration: 0.5 });
+        if (!reduce) gsap.fromTo(app, { y: -12 }, { y: 0, duration: 0.5, ease: 'elastic.out(1,.25)' });
+      } else if (tier === 'fumble') {
+        sparks(kx, ky, 20);
+        gsap.to(keep, { rotation: '+=25', duration: 0.1, yoyo: true, repeat: 3 });
+      } else impactFx(rune, kx, ky, tier === 'success' ? 2.5 : 1);
+      render();
+      await wait(700);
+      els.forEach((el) => gsap.to(el, { opacity: 0, scale: 0.4, duration: 0.3, onComplete: () => el.remove() }));
+      if (tier === 'crit') {
+        const row = [];
+        for (let cc = 0; cc < COLS; cc++) if (grid[r][cc] && MATCH.includes(grid[r][cc].type)) row.push(key(r, cc));
+        await strike(row, 1);
+        removeCells(row);
+      }
+      await wait(500);
+      await flushBanners();
+      await collapse();
+      if (!checkEnd()) await resolve(null);
+      await afterMove(true);
+    }
+    async function power(id) {
+      if (S.busy || S.over || S.charge[id] < 100) return;
+      S.busy = true;
+      setSel(null);
+      S.charge[id] = 0;
+      render();
+      const h = HEROES.find((x) => x.id === id),
+        card = $(`.hc[data-h=${id}]`);
+      gsap.fromTo(card, { y: 0 }, { y: -14, duration: 0.18, yoyo: true, repeat: 1, ease: 'power2.out' });
+      await cutIn(h);
+      if (id === 'kael') {
+        const cells = [];
+        for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (type(r, c) === 'blade') cells.push(key(r, c));
+        await battleFocus(cells);
+        await flushBanners();
+        await wait(120);
+        await collapse();
+      } else if (id === 'garran') {
+        await shieldWall(card);
+      } else if (id === 'mara') {
+        await fireVolley(card);
+      } else if (id === 'elin') {
+        await mendingHerbs(card);
+      }
+      if (!checkEnd()) await resolve(null);
+      await afterMove(false);
+    }
+
+    /* ---------- cut-in ---------- */
+    async function cutIn(h) {
+      const el = $('#cutin'),
+        band = el.querySelector('.band'),
+        lines = el.querySelector('.lines'),
+        img = el.querySelector('img.hero'),
+        title = el.querySelector('.title'),
+        who = el.querySelector('.who'),
+        flash = el.querySelector('.flash');
+      el.style.setProperty('--c1', h.c1);
+      el.style.setProperty('--c2', h.c2);
+      img.src = h.cut;
+      title.textContent = h.power;
+      who.textContent = h.name + ' · ' + h.text;
+      sweep(h.c1);
+      const tl = gsap.timeline();
+      tl.set(el, { opacity: 1 })
+        .set(flash, { opacity: 0 })
+        .fromTo(el.querySelector('.dim'), { opacity: 0 }, { opacity: 1, duration: 0.15 }, 0)
+        .fromTo(band, { scaleY: 0 }, { scaleY: 1, duration: 0.18, ease: 'power3.out' }, 0.05)
+        .fromTo(lines, { x: 0 }, { x: -260, duration: 1.4, ease: 'none' }, 0)
+        .fromTo(
+          img,
+          { xPercent: -260, opacity: 0 },
+          { xPercent: -55, opacity: 1, duration: 0.3, ease: 'power3.out' },
+          0.12,
+        )
+        .to(img, { xPercent: -45, duration: 0.75, ease: 'none' }, 0.42)
+        .fromTo(title, { scale: 2.2, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.25, ease: 'back.out(2)' }, 0.3)
+        .fromTo(who, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.2 }, 0.45)
+        .to(img, { xPercent: 160, opacity: 0, duration: 0.22, ease: 'power3.in' }, 1.15)
+        .to([title, who], { opacity: 0, duration: 0.15 }, 1.15)
+        .to(band, { scaleY: 0, duration: 0.18, ease: 'power3.in' }, 1.2)
+        .to(flash, { opacity: 0.5, duration: 0.05 }, 1.35)
+        .to(flash, { opacity: 0, duration: 0.2 })
+        .to(el, { opacity: 0, duration: 0.15 }, 1.4);
+      tone(220, 0.35, 'sawtooth', 0.07, 3);
+      setTimeout(() => tone(880, 0.5, 'triangle', 0.1, 1.2), 300 / (reduce ? 3 : 1));
+      await new Promise((r) => tl.eventCallback('onComplete', r));
+    }
+
+    /* ---------- particles (canvas, additive glow) ---------- */
+    const pc = $('#pfx'),
+      px = pc.getContext('2d');
+    let parts = [],
+      arrows = [],
+      slashes = [],
+      walls = [],
+      orbs = [],
+      pRun = false;
+    const sprites = {};
+    function sprite(col) {
+      if (sprites[col]) return sprites[col];
+      const c = document.createElement('canvas');
+      c.width = c.height = 64;
+      const g = c.getContext('2d'),
+        gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      gr.addColorStop(0, 'rgba(255,255,255,1)');
+      gr.addColorStop(0.25, col);
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr;
+      g.fillRect(0, 0, 64, 64);
+      return (sprites[col] = c);
+    }
+    function sizeP() {
+      const d = Math.min(2, devicePixelRatio || 1);
+      pc.width = app.clientWidth * d;
+      pc.height = app.clientHeight * d;
+      px.setTransform(d, 0, 0, d, 0, 0);
+    }
+    function emit(o) {
+      parts.push(
+        Object.assign(
+          { vx: 0, vy: 0, life: 1, decay: 0.03, size: 6, col: 'rgba(255,140,40,1)', drag: 0.96, grav: 0, grow: 0 },
+          o,
+        ),
+      );
+      kick();
+    }
+    function kick() {
+      if (!pRun) {
+        pRun = true;
+        requestAnimationFrame(loop);
+      }
+    }
+    const FIRE = ['rgba(255,170,60,1)', 'rgba(255,110,30,1)', 'rgba(255,220,120,1)', 'rgba(255,70,20,1)'];
+    function loop() {
+      const W = app.clientWidth,
+        H = app.clientHeight;
+      px.clearRect(0, 0, W, H);
+      px.globalCompositeOperation = 'lighter';
+      for (const sl of slashes) {
+        // crescent slash: thick white core inside a cold glow
+        const e = Math.min(1, sl.t),
+          ex = sl.x0 + (sl.x1 - sl.x0) * e,
+          ey = sl.y0 + (sl.y1 - sl.y0) * e,
+          mx = (sl.x0 + ex) / 2 + sl.bow * (ey - sl.y0) * 0.25,
+          my = (sl.y0 + ey) / 2 - sl.bow * (ex - sl.x0) * 0.25;
+        px.globalAlpha = Math.max(0, sl.life);
+        px.lineCap = 'round';
+        for (const [w, c] of [
+          [30, sl.glow],
+          [14, 'rgba(230,240,255,0.7)'],
+          [5, 'rgba(255,255,255,1)'],
+        ]) {
+          px.strokeStyle = c;
+          px.lineWidth = w * sl.scale * (0.4 + sl.life * 0.6);
+          px.beginPath();
+          px.moveTo(sl.x0, sl.y0);
+          px.quadraticCurveTo(mx, my, ex, ey);
+          px.stroke();
+        }
+        if (sl.t >= 1) sl.life -= sl.scale < 1 ? 0.09 : 0.045;
+      }
+      px.globalAlpha = 1;
+      slashes = slashes.filter((sl) => sl.life > 0);
+      for (const w of walls) {
+        // Garran's barrier: two rows of glowing hexes growing out from the middle
+        const r = 12,
+          dx = r * 1.75,
+          now = performance.now() / 1000;
+        if (w.fade) w.life -= 0.035;
+        for (let row = 0; row < 2; row++)
+          for (let x = (row ? dx / 2 : 0) - dx; x < W + dx; x += dx) {
+            if (Math.abs(x - W / 2) > w.t * (W / 2 + dx)) continue;
+            const y = w.y - row * r * 1.5,
+              a = Math.max(0, w.life) * (0.55 + 0.35 * Math.sin(now * 6 + x * 0.05));
+            px.beginPath();
+            for (let i = 0; i < 6; i++) {
+              const an = Math.PI / 6 + (i * Math.PI) / 3;
+              px.lineTo(x + Math.cos(an) * r, y + Math.sin(an) * r);
+            }
+            px.closePath();
+            px.fillStyle = `rgba(80,150,255,${a * 0.25})`;
+            px.fill();
+            px.strokeStyle = `rgba(170,215,255,${a})`;
+            px.lineWidth = 1.6;
+            px.stroke();
+          }
+      }
+      walls = walls.filter((w) => w.life > 0);
+      for (const o of orbs) {
+        // a ball of light: coloured glow, white core, a slow pulse
+        if (o.r <= 0) continue;
+        const pulse = 1 + 0.12 * Math.sin(performance.now() / 70 + o.seed);
+        px.globalAlpha = 0.9;
+        const g = o.r * 4.2 * pulse;
+        px.drawImage(sprite(o.col), o.x - g / 2, o.y - g / 2, g, g);
+        px.globalAlpha = 1;
+        const c = o.r * 1.7 * pulse;
+        px.drawImage(sprite('rgba(255,255,255,1)'), o.x - c / 2, o.y - c / 2, c, c);
+      }
+      for (const a of arrows) {
+        const tr = a.trail;
+        if (tr.length < 2) continue;
+        for (let i = 1; i < tr.length; i++) {
+          const f = i / tr.length;
+          px.strokeStyle = `rgba(255,${(150 + 90 * f) | 0},${(60 + 120 * f) | 0},${f})`;
+          px.lineWidth = 2 + 8 * f;
+          px.lineCap = 'round';
+          px.beginPath();
+          px.moveTo(tr[i - 1][0], tr[i - 1][1]);
+          px.lineTo(tr[i][0], tr[i][1]);
+          px.stroke();
+        }
+        const [hx, hy] = tr[tr.length - 1];
+        const sp = sprite('rgba(255,200,90,1)');
+        const z = a.big ? 48 : 34;
+        px.globalAlpha = 1;
+        px.drawImage(sp, hx - z / 2, hy - z / 2, z, z);
+      }
+      for (const p of parts) {
+        p.vx *= p.drag;
+        p.vy = p.vy * p.drag + p.grav;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= p.decay;
+        p.size += p.grow;
+        if (p.life <= 0) continue;
+        px.globalAlpha = Math.min(1, p.life * 1.4);
+        if (p.ring) {
+          px.strokeStyle = p.col;
+          px.lineWidth = 3 * p.life;
+          px.beginPath();
+          px.arc(p.x, p.y, p.size, 0, 6.283);
+          px.stroke();
+        } else {
+          const z = p.size * (0.5 + p.life * 0.5) * 2;
+          px.drawImage(sprite(p.col), p.x - z / 2, p.y - z / 2, z, z);
+        }
+      }
+      px.globalAlpha = 1;
+      parts = parts.filter((p) => p.life > 0);
+      if (parts.length || arrows.length || slashes.length || walls.length || orbs.length) requestAnimationFrame(loop);
+      else {
+        pRun = false;
+        px.clearRect(0, 0, W, H);
+      }
+    }
+    function burst(x, y, big) {
+      const n = big ? 70 : 36;
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * 6.283,
+          v = 1.5 + Math.random() * (big ? 9 : 6);
+        emit({
+          x,
+          y,
+          vx: Math.cos(a) * v,
+          vy: Math.sin(a) * v - 1.5,
+          grav: 0.14,
+          drag: 0.93,
+          decay: 0.018 + Math.random() * 0.03,
+          size: 2 + Math.random() * 4,
+          col: FIRE[i % 4],
+        });
+      }
+      for (let i = 0; i < (big ? 14 : 7); i++)
+        emit({
+          x: x + Math.random() * 30 - 15,
+          y: y + Math.random() * 20 - 10,
+          vx: Math.random() * 2 - 1,
+          vy: -0.6 - Math.random() * 1.2,
+          drag: 0.98,
+          decay: 0.012,
+          size: 10 + Math.random() * 14,
+          grow: 0.2,
+          col: 'rgba(255,90,20,1)',
+        });
+      emit({ x, y, ring: true, size: 6, grow: big ? 5 : 3.2, decay: 0.05, col: 'rgba(255,210,140,1)' });
+      emit({ x, y, size: big ? 60 : 38, decay: 0.08, col: 'rgba(255,240,200,1)' });
+    }
+    function sweep(col) {
+      // rising ember wash behind a cut-in
+      const W = app.clientWidth,
+        H = app.clientHeight;
+      for (let i = 0; i < 40; i++)
+        emit({
+          x: Math.random() * W,
+          y: H * (0.3 + Math.random() * 0.4),
+          vx: 3 + Math.random() * 5,
+          vy: -0.5 - Math.random(),
+          drag: 0.99,
+          decay: 0.012 + Math.random() * 0.01,
+          size: 2 + Math.random() * 3,
+          col: col.startsWith('#') ? hexA(col) : col,
+        });
+    }
+    function hexA(h) {
+      const n = parseInt(h.slice(1), 16);
+      return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},1)`;
+    }
+    function embersOn(k, n) {
+      // lingering burn on the foe
+      const [x, y] = foeXY(k);
+      for (let i = 0; i < n; i++)
+        setTimeout(
+          () =>
+            emit({
+              x: x + Math.random() * 60 - 30,
+              y: y + Math.random() * 30,
+              vx: Math.random() - 0.5,
+              vy: -1 - Math.random() * 1.5,
+              drag: 0.98,
+              decay: 0.02,
+              size: 3 + Math.random() * 4,
+              col: FIRE[i % 4],
+            }),
+          i * 40,
+        );
+    }
+
+    const STEEL = ['rgba(220,235,255,1)', 'rgba(140,185,255,1)', 'rgba(255,230,170,1)'];
+    function sparks(x, y, n) {
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * 6.283,
+          v = 2 + Math.random() * 7;
+        emit({
+          x,
+          y,
+          vx: Math.cos(a) * v,
+          vy: Math.sin(a) * v,
+          grav: 0.12,
+          drag: 0.92,
+          decay: 0.03 + Math.random() * 0.03,
+          size: 1.5 + Math.random() * 2.5,
+          col: STEEL[i % 3],
+        });
+      }
+    }
+    function slash(x0, y0, x1, y1, bow, dur, scale = 1, glow = 'rgba(120,170,255,0.35)', quiet = false) {
+      const sl = { x0, y0, x1, y1, bow, t: 0, life: 1, scale, glow };
+      slashes.push(sl);
+      kick();
+      if (!quiet) tone(1800, 0.18, 'sawtooth', 0.05, 0.2);
+      return tw(sl, { t: 1, duration: dur, ease: 'power3.out' });
+    }
+    async function battleFocus(cells) {
+      // 1. Kael's focus: steel light lifts off every blade rune
+      cells.forEach((k, i) => {
+        const [r, c] = rc(k),
+          [x, y] = cellXY(r, c);
+        gsap.to(grid[r][c].el, { scale: 1.3, duration: 0.2, delay: i * 0.02, ease: 'back.out(3)' });
+        for (let j = 0; j < 8; j++)
+          setTimeout(
+            () =>
+              emit({
+                x: x + Math.random() * s - s / 2,
+                y: y + s * 0.3,
+                vx: 0,
+                vy: -1.5 - Math.random() * 2,
+                drag: 0.97,
+                decay: 0.03,
+                size: 2 + Math.random() * 3,
+                col: STEEL[j % 3],
+              }),
+            j * 45,
+          );
+      });
+      tone(160, 0.6, 'sawtooth', 0.06, 4);
+      await wait(520);
+      // 2. the blades spin up at their targets; 3. a giant crossing slash, flash and shower of sparks
+      await strike(cells, N.focusMult, [], {
+        steel: true,
+        finale: async (zones) => {
+          const W = app.clientWidth,
+            st = $('#stage').getBoundingClientRect(),
+            a = app.getBoundingClientRect(),
+            top = st.top - a.top,
+            h = st.height;
+          if (!reduce) gsap.to(app, { x: 6, duration: 0.05, yoyo: true, repeat: 3 });
+          const one = slash(W * 0.08, top + h * 0.18, W * 0.92, top + h * 0.82, 1, 0.16);
+          await wait(110);
+          const two = slash(W * 0.92, top + h * 0.18, W * 0.08, top + h * 0.82, -1, 0.16);
+          await Promise.all([one, two]);
+          gsap.fromTo('#bossFlash', { opacity: 1 }, { opacity: 0, duration: 0.45 });
+          thud(0.5);
+          sparks(W / 2, top + h / 2, 60);
+          for (const z of zones) {
+            const [x, y] = foeXY(z);
+            sparks(x, y, 30);
+          }
+          if (!reduce) gsap.fromTo(app, { y: -12 }, { y: 0, duration: 0.5, ease: 'elastic.out(1,.25)' });
+          await wait(120);
+        },
+      });
+      removeCells(cells);
+    }
+
+    const COL = {
+      blade: STEEL,
+      ember: FIRE,
+      ruby: ['rgba(255,60,80,1)', 'rgba(255,150,170,1)', 'rgba(200,20,50,1)'],
+      ward: ['rgba(120,190,255,1)', 'rgba(255,220,140,1)', 'rgba(200,230,255,1)'],
+      vial: ['rgba(110,230,120,1)', 'rgba(200,255,160,1)', 'rgba(60,200,90,1)'],
+      skull: ['rgba(170,90,255,1)', 'rgba(120,60,200,1)', 'rgba(220,170,255,1)'],
+    };
+    function ring(x, y, col, grow = 3, size = 6) {
+      emit({ x, y, ring: true, size, grow, decay: 0.05, col });
+    }
+    // every rune breaks its own way; k scales with the combo
+    function breakFx(t, x, y, k) {
+      const C = COL[t],
+        n = Math.round(10 * k);
+      if (t === 'blade') {
+        const d = s * 0.38;
+        slash(x - d, y - d, x + d, y + d, 0, 0.08, 0.2, 'rgba(150,190,255,0.35)', true);
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * 6.283,
+            v = 2 + Math.random() * 4;
+          emit({
+            x,
+            y,
+            vx: Math.cos(a) * v,
+            vy: Math.sin(a) * v,
+            drag: 0.9,
+            decay: 0.05,
+            size: 1.5 + Math.random() * 2,
+            col: C[i % 3],
+          });
+        }
+      } else if (t === 'ember') {
+        for (let i = 0; i < n + 4; i++) {
+          const a = Math.random() * 6.283,
+            v = 1 + Math.random() * 3.5;
+          emit({
+            x,
+            y,
+            vx: Math.cos(a) * v,
+            vy: Math.sin(a) * v - 1.5,
+            grav: -0.05,
+            drag: 0.93,
+            decay: 0.035,
+            size: 3 + Math.random() * 5,
+            col: C[i % 4],
+          });
+        }
+      } else if (t === 'ruby') {
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * 6.283,
+            v = 2.5 + Math.random() * 4;
+          emit({
+            x,
+            y,
+            vx: Math.cos(a) * v,
+            vy: Math.sin(a) * v - 2,
+            grav: 0.25,
+            drag: 0.95,
+            decay: 0.03,
+            size: 2 + Math.random() * 2.5,
+            col: C[i % 3],
+          });
+        }
+        emit({ x, y, size: s * 0.3, decay: 0.12, col: 'rgba(255,120,140,1)' });
+      } else if (t === 'ward') {
+        ring(x, y, 'rgba(170,215,255,1)', 2.4, s * 0.25);
+        for (let i = 0; i < n / 2; i++) {
+          const a = (i / (n / 2)) * 6.283;
+          emit({ x, y, vx: Math.cos(a) * 3, vy: Math.sin(a) * 3, drag: 0.9, decay: 0.05, size: 2.5, col: C[i % 3] });
+        }
+      } else if (t === 'vial') {
+        for (let i = 0; i < n; i++) {
+          const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.4,
+            v = 2 + Math.random() * 4;
+          emit({
+            x,
+            y,
+            vx: Math.cos(a) * v,
+            vy: Math.sin(a) * v,
+            grav: 0.3,
+            drag: 0.97,
+            decay: 0.03,
+            size: 2 + Math.random() * 3,
+            col: C[i % 3],
+          });
+        }
+      } else if (t === 'skull') {
+        for (let i = 0; i < 12; i++)
+          emit({
+            x: x + Math.random() * 20 - 10,
+            y: y + Math.random() * 20 - 10,
+            vx: Math.random() * 2 - 1,
+            vy: -0.5 - Math.random(),
+            drag: 0.97,
+            decay: 0.025,
+            size: 8 + Math.random() * 10,
+            grow: 0.3,
+            col: C[i % 3],
+          });
+      }
+    }
+    function impactFx(t, x, y, k) {
+      const C = COL[t] || FIRE;
+      for (let i = 0; i < Math.round(8 * k); i++) {
+        const a = Math.random() * 6.283,
+          v = 2 + Math.random() * 5;
+        emit({
+          x,
+          y,
+          vx: Math.cos(a) * v,
+          vy: Math.sin(a) * v,
+          grav: 0.1,
+          drag: 0.92,
+          decay: 0.04,
+          size: 2 + Math.random() * 3,
+          col: C[i % C.length],
+        });
+      }
+    }
+    function runLine(g) {
+      // a light line runs along the matched row before it breaks
+      const cells = g.longest,
+        [r0, c0] = rc(cells[0]),
+        [r1, c1] = rc(cells[cells.length - 1]),
+        [x0, y0] = cellXY(r0, c0),
+        [x1, y1] = cellXY(r1, c1);
+      const glow = {
+        blade: 'rgba(150,190,255,0.5)',
+        ember: 'rgba(255,120,40,0.55)',
+        ruby: 'rgba(255,50,80,0.55)',
+        ward: 'rgba(120,180,255,0.5)',
+        vial: 'rgba(90,230,110,0.5)',
+      }[g.t];
+      slash(x0, y0, x1, y1, 0, 0.1, 0.3, glow, true);
+    }
+
+    // 4 and 5 matches: the runes are drawn into one cell and forge a d20 there
+    function gatherFx(at, g, gold) {
+      const [r0, c0] = rc(at),
+        [tx, ty] = cellXY(r0, c0),
+        C = gold
+          ? ['rgba(255,220,120,1)', 'rgba(255,255,220,1)', 'rgba(255,170,60,1)']
+          : ['rgba(255,70,90,1)', 'rgba(255,200,120,1)', 'rgba(220,30,60,1)'];
+      for (const k of g ? g.cells : []) {
+        const [r, c] = rc(k),
+          [x, y] = cellXY(r, c);
+        if (k === at) continue;
+        for (let i = 0; i < 6; i++)
+          emit({
+            x: x + Math.random() * 16 - 8,
+            y: y + Math.random() * 16 - 8,
+            vx: (tx - x) / 14,
+            vy: (ty - y) / 14,
+            drag: 0.93,
+            decay: 0.035,
+            size: 2 + Math.random() * 3,
+            col: C[i % 3],
+          });
+        if (grid[r][c])
+          gsap.to(grid[r][c].el, {
+            x: '+=' + (tx - x) * 0.35,
+            y: '+=' + (ty - y) * 0.35,
+            scale: 0.7,
+            duration: 0.3,
+            ease: 'power2.in',
+          });
+      }
+      emit({ x: tx, y: ty, size: s * (gold ? 0.55 : 0.4), decay: 0.07, col: C[0] });
+      tone(gold ? 330 : 260, 0.35, 'sawtooth', 0.06, 2.5);
+    }
+    function forgeFx(r, c, gold) {
+      const [x, y] = cellXY(r, c),
+        C = gold
+          ? ['rgba(255,220,120,1)', 'rgba(255,255,220,1)', 'rgba(255,170,60,1)']
+          : ['rgba(255,70,90,1)', 'rgba(255,200,120,1)', 'rgba(220,30,60,1)'];
+      ring(x, y, C[1], gold ? 6 : 4, s * 0.3);
+      ring(x, y, C[0], gold ? 4 : 2.5, s * 0.15);
+      for (let i = 0; i < (gold ? 70 : 36); i++) {
+        const a = Math.random() * 6.283,
+          v = 2 + Math.random() * (gold ? 8 : 5);
+        emit({
+          x,
+          y,
+          vx: Math.cos(a) * v,
+          vy: Math.sin(a) * v,
+          grav: 0.08,
+          drag: 0.93,
+          decay: 0.025,
+          size: 2 + Math.random() * 3,
+          col: C[i % 3],
+        });
+      }
+      if (gold) {
+        // a pillar of light and a flash for the golden die
+        const top = $('#stage').getBoundingClientRect().top - app.getBoundingClientRect().top;
+        slash(x, y, x, top, 0, 0.18, 0.9, 'rgba(255,200,90,0.5)', true);
+        gsap.fromTo('#bossFlash', { opacity: 0.6 }, { opacity: 0, duration: 0.5 });
+        if (!reduce) gsap.fromTo(app, { y: -6 }, { y: 0, duration: 0.45, ease: 'elastic.out(1,.3)' });
+      }
+      float(
+        gold ? 'Golden d20' : 'd20 forged',
+        gold ? 'crit' : 'armor',
+        Math.min(Math.max(x, 130), app.clientWidth - 130),
+        y - s * 0.6,
+      );
+      gold
+        ? (tone(523, 0.3, 'triangle', 0.12),
+          setTimeout(() => tone(784, 0.3, 'triangle', 0.12), 120),
+          setTimeout(() => tone(1047, 0.5, 'triangle', 0.12), 240))
+        : tone(660, 0.3, 'triangle', 0.1, 1.5);
+    }
+
+    async function shieldWall(card) {
+      const [cx, cy] = appXY(card),
+        a = app.getBoundingClientRect(),
+        b = board.getBoundingClientRect(),
+        W = app.clientWidth,
+        wy = $('#hero').getBoundingClientRect().top - a.top + 16,
+        BL = COL.ward;
+      ring(cx, cy, 'rgba(170,215,255,1)', 4, 20);
+      for (let i = 0; i < 30; i++) {
+        const an = Math.random() * 6.283,
+          v = 2 + Math.random() * 4;
+        emit({
+          x: cx,
+          y: cy,
+          vx: Math.cos(an) * v,
+          vy: Math.sin(an) * v - 2,
+          drag: 0.92,
+          decay: 0.03,
+          size: 2 + Math.random() * 3,
+          col: BL[i % 3],
+        });
+      }
+      const wall = { t: 0, life: 1, y: wy };
+      walls.push(wall);
+      kick();
+      tone(180, 0.6, 'triangle', 0.12, 2.2);
+      thud(0.4);
+      if (!reduce) gsap.fromTo(app, { y: 5 }, { y: 0, duration: 0.4, ease: 'elastic.out(1,.3)' });
+      await tw(wall, { t: 1, duration: 0.4, ease: 'power2.out' });
+      S.armor = Math.min(N.armorCap + N.wallArmor, S.armor + N.wallArmor);
+      const [hx, hy] = appXY($('#heroBar'));
+      float('+' + N.wallArmor + ' armor', 'armor', hx, hy - 16);
+      render();
+      await wait(200);
+      const live = Object.keys(S.foes).filter((k) => S.foes[k].alive);
+      tone(400, 0.4, 'sine', 0.08, 2);
+      await Promise.all(
+        live.map((k, i) => {
+          const [fx2, fy2] = foeXY(k),
+            sx = W / 2 + (fx2 - W / 2) * 0.2,
+            o = { t: 0 };
+          return tw(o, {
+            t: 1,
+            duration: 0.42,
+            delay: i * 0.09,
+            ease: 'power2.in',
+            onUpdate: () => {
+              const x = sx + (fx2 - sx) * o.t,
+                y = wy + (fy2 - wy) * o.t;
+              for (let j = 0; j < 3; j++)
+                emit({
+                  x: x + Math.random() * 10 - 5,
+                  y,
+                  vx: Math.random() - 0.5,
+                  vy: 1,
+                  drag: 0.9,
+                  decay: 0.05,
+                  size: 3 + Math.random() * 3,
+                  col: BL[rnd(3)],
+                });
+            },
+          }).then(() => {
+            ring(fx2, fy2, 'rgba(170,215,255,1)', 4, 10);
+            impactFx('ward', fx2, fy2, 2);
+            S.foes[k].cd += 1;
+            render();
+            const badge = k === 'vexa' ? $('#vexaCd') : pods[k].querySelector('.cd');
+            gsap.fromTo(badge, { scale: 1.9 }, { scale: 1, duration: 0.45, ease: 'back.out(3)' });
+            tone(620, 0.15, 'triangle', 0.08);
+          });
+        }),
+      );
+      banner('Foes stalled', 'Every foe waits one more turn');
+      await wait(900);
+      wall.fade = true;
+    }
+
+    async function mendingHerbs(card) {
+      const [cx, cy] = appXY(card),
+        G = COL.vial,
+        a = app.getBoundingClientRect();
+      for (let i = 0; i < 60; i++)
+        setTimeout(() => {
+          const an = i * 0.55;
+          emit({
+            x: cx + Math.cos(an) * 26,
+            y: cy + Math.sin(an) * 10,
+            vx: Math.cos(an) * 1.8,
+            vy: -2.5 - Math.random() * 3,
+            grav: -0.02,
+            drag: 0.97,
+            decay: 0.014,
+            size: 3 + Math.random() * 4,
+            col: G[i % 3],
+          });
+        }, i * 10);
+      [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.35, 'sine', 0.08), i * 90));
+      await wait(450);
+      const bar = $('#heroBar').getBoundingClientRect(),
+        bx = bar.left - a.left,
+        by = bar.top - a.top;
+      for (let i = 0; i < 55; i++)
+        setTimeout(
+          () =>
+            emit({
+              x: bx + Math.random() * bar.width,
+              y: by - 120 - Math.random() * 80,
+              vx: 0,
+              vy: 3 + Math.random() * 2,
+              drag: 0.995,
+              decay: 0.017,
+              size: 3 + Math.random() * 3,
+              col: G[rnd(3)],
+            }),
+          i * 8,
+        );
+      await wait(550);
+      const real = Math.min(N.herbs, S.maxHp - S.hp);
+      S.hp += real;
+      float('+' + N.herbs, 'heal', bx + bar.width / 2, by - 16);
+      emit({ x: bx + bar.width / 2, y: by + 6, size: bar.width * 0.4, decay: 0.05, col: 'rgba(120,255,140,1)' });
+      gsap.fromTo('#heroBar', { scaleY: 1.6 }, { scaleY: 1, duration: 0.4, ease: 'back.out(3)' });
+      render();
+      const skulls = [];
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (type(r, c) === 'skull') skulls.push([r, c]);
+      await Promise.all(
+        skulls.map(([r, c], i) =>
+          wait(i * 90).then(() => {
+            const [x, y] = cellXY(r, c);
+            breakFx('skull', x, y, 1);
+            ring(x, y, 'rgba(140,255,150,1)', 2.5, s * 0.2);
+            for (let j = 0; j < 12; j++) {
+              const an = (j / 12) * 6.283;
+              emit({
+                x,
+                y,
+                vx: Math.cos(an) * 2.5,
+                vy: Math.sin(an) * 2.5 - 1,
+                drag: 0.93,
+                decay: 0.03,
+                size: 3,
+                col: G[j % 3],
+              });
+            }
+            grid[r][c].el.remove();
+            grid[r][c] = makeTile('vial', r, c);
+            gsap.from(grid[r][c].el, { scale: 0, rotation: 90, duration: 0.4, ease: 'back.out(2)' });
+            tone(880 + i * 60, 0.12, 'sine', 0.06);
+          }),
+        ),
+      );
+      await wait(450);
+    }
+
+    async function fireVolley(card) {
+      const [sx, sy] = appXY(card),
+        shots = [];
+      // Mara draws: embers gather at her card
+      for (let i = 0; i < 26; i++) {
+        const a = Math.random() * 6.283,
+          r = 50 + Math.random() * 30;
+        emit({
+          x: sx + Math.cos(a) * r,
+          y: sy + Math.sin(a) * r,
+          vx: (-Math.cos(a) * r) / 14,
+          vy: (-Math.sin(a) * r) / 14,
+          drag: 0.9,
+          decay: 0.04,
+          size: 3 + Math.random() * 3,
+          col: FIRE[i % 4],
+        });
+      }
+      tone(300, 0.4, 'sawtooth', 0.05, 2.5);
+      await wait(380);
+      for (let i = 0; i < N.volley; i++) {
+        const live = Object.keys(S.foes).filter((k) => S.foes[k].alive);
+        if (!live.length || S.over) break;
+        const k = live[rnd(live.length)],
+          [tx, ty] = foeXY(k),
+          big = i === N.volley - 1;
+        const a = {
+          t: 0,
+          big,
+          trail: [],
+          x0: sx + (Math.random() * 30 - 15),
+          y0: sy - 24,
+          cx: (sx + tx) / 2 + (Math.random() * 180 - 90),
+          cy: Math.min(sy, ty) - 90 - Math.random() * 90,
+          x1: tx + (Math.random() * 30 - 15),
+          y1: ty + (Math.random() * 20 - 10),
+        };
+        arrows.push(a);
+        kick();
+        tone(900 + i * 60, 0.09, 'triangle', 0.07, 0.6);
+        shots.push(
+          tw(a, {
+            t: 1,
+            duration: big ? 0.6 : 0.48,
+            ease: 'power1.in',
+            onUpdate: () => {
+              const t = a.t,
+                u = 1 - t,
+                x = u * u * a.x0 + 2 * u * t * a.cx + t * t * a.x1,
+                y = u * u * a.y0 + 2 * u * t * a.cy + t * t * a.y1;
+              a.trail.push([x, y]);
+              if (a.trail.length > 18) a.trail.shift();
+              for (let j = 0; j < 2; j++)
+                emit({
+                  x,
+                  y,
+                  vx: Math.random() - 0.5,
+                  vy: Math.random() - 0.2,
+                  drag: 0.94,
+                  decay: 0.05,
+                  size: 2 + Math.random() * 3,
+                  col: FIRE[rnd(4)],
+                });
+            },
+          }).then(() => {
+            arrows.splice(arrows.indexOf(a), 1);
+            burst(a.x1, a.y1, big);
+            if (!reduce) gsap.fromTo(app, { x: big ? -10 : -4 }, { x: 0, duration: 0.3, ease: 'elastic.out(1,.3)' });
+            if (S.over) return;
+            const dmg = big ? N.volleyDmg * 2 : N.volleyDmg;
+            hit(k, dmg, big ? 'crit' : 'dmg');
+            if (S.foes[k].alive) {
+              S.foes[k].burn++;
+              embersOn(k, big ? 24 : 10);
+            }
+            render();
+            checkEnd();
+          }),
+        );
+        await wait(130);
+      }
+      await Promise.all(shots);
+      await wait(450);
+      await flushBanners();
+    }
+
+    /* ---------- input ---------- */
+    function setSel(k) {
+      if (sel != null) {
+        const [r, c] = rc(sel);
+        grid[r][c] && grid[r][c].el.classList.remove('sel');
+      }
+      sel = k;
+      if (k != null) {
+        const [r, c] = rc(k);
+        grid[r][c].el.classList.add('sel');
+      }
+    }
+    let down = null;
+    board.addEventListener('pointerdown', (e) => {
+      audio();
+      if (S.busy || S.over) return;
+      const b = board.getBoundingClientRect(),
+        c = Math.floor((e.clientX - b.left) / s),
+        r = Math.floor((e.clientY - b.top) / s);
+      if (r < 0 || r >= ROWS || c < 0 || c >= COLS || !grid[r][c]) return;
+      const ty = grid[r][c].type;
+      down = { r, c, x: e.clientX, y: e.clientY, moved: false, die: ty === 'd20' || ty === 'd20a', aim: null };
+      board.setPointerCapture(e.pointerId);
+    });
+    board.addEventListener('pointermove', (e) => {
+      if (down && down.die) {
+        aimAt(e);
+        return;
+      }
+      if (!down || down.moved) return;
+      const dx = e.clientX - down.x,
+        dy = e.clientY - down.y;
+      if (Math.hypot(dx, dy) < s * 0.35) return;
+      down.moved = true;
+      const [dr, dc] = Math.abs(dx) > Math.abs(dy) ? [0, Math.sign(dx)] : [Math.sign(dy), 0];
+      const r2 = down.r + dr,
+        c2 = down.c + dc;
+      if (r2 < 0 || r2 >= ROWS || c2 < 0 || c2 >= COLS) return;
+      playSwap(key(down.r, down.c), key(r2, c2));
+    });
+    board.addEventListener('pointerup', () => {
+      if (!down) return;
+      const d = down;
+      down = null;
+      if (d.die) {
+        gsap.to('#aim', { opacity: 0, duration: 0.15 });
+        render();
+        if (S.busy) return;
+        if (d.aim) return rollDie(d.r, d.c, d.aim);
+        if (!d.moved) return rollDie(d.r, d.c);
+        return;
+      }
+      if (d.moved || S.busy) return;
+      const k = key(d.r, d.c),
+        t = type(d.r, d.c);
+      if (t === 'd20' || t === 'd20a') return rollDie(d.r, d.c);
+      if (sel == null) return setSel(k);
+      if (sel === k) return setSel(null);
+      const [r0, c0] = rc(sel);
+      if (Math.abs(r0 - d.r) + Math.abs(c0 - d.c) === 1) return playSwap(sel, k);
+      setSel(k);
+    });
+    // dragging a die: a dotted line from the die to your finger; whichever foe it points at is the target
+    function aimAt(e) {
+      const a = app.getBoundingClientRect(),
+        [x0, y0] = cellXY(down.r, down.c),
+        x = e.clientX - a.left,
+        y = e.clientY - a.top,
+        dx = x - x0,
+        dy = y - y0,
+        len = Math.hypot(dx, dy);
+      if (len < s * 0.5 || dy > -s * 0.3) {
+        down.aim = null;
+        down.moved = len >= s * 0.5;
+        gsap.set('#aim', { opacity: 0 });
+        render();
+        return;
+      }
+      down.moved = true;
+      const st = $('#stage').getBoundingClientRect(),
+        ux = x0 + dx * ((st.bottom - a.top - 40 - y0) / dy) || x; // where the line crosses the stage
+      let k = 'vexa';
+      if (WARDS) {
+        const lx = $('#lanes').getBoundingClientRect().left - a.left,
+          rel = (ux - lx) / (s * COLS);
+        k = rel < 2 / 7 ? 'left' : rel > 5 / 7 ? 'right' : 'vexa';
+        if (!S.foes[k].alive) k = 'vexa';
+      }
+      down.aim = k;
+      render();
+      (k === 'vexa' ? pods.vexa : pods[k]).classList.add('locked');
+      gsap.set('#aim', { x: x0, y: y0, width: len, rotation: (Math.atan2(dy, dx) * 180) / Math.PI, opacity: 0.95 });
+    }
+    function lockOn(k) {
+      audio();
+      if (S.over) return;
+      S.lock = S.lock === k ? null : k;
+      hideHint();
+      render();
+      tone(600, 0.06, 'sine', 0.06);
+    }
+    pods.left.addEventListener('click', () => lockOn('left'));
+    pods.right.addEventListener('click', () => lockOn('right'));
+    pods.vexa.addEventListener('click', () => lockOn('vexa'));
+    function buildParty() {
+      $('#party').innerHTML = HEROES.map(
+        (h) =>
+          `<button class="hc" data-h="${h.id}" aria-label="${h.name}: ${h.power}"><img class="face" src="${h.face}" alt=""><div class="fill"></div><span class="pct"></span><span class="rune"><img src="${IMG[h.rune]}" alt=""></span><span class="nm">${h.name}<small>${h.power}</small></span></button>`,
+      ).join('');
+      $('#party')
+        .querySelectorAll('.hc')
+        .forEach((b) =>
+          b.addEventListener('click', () => {
+            audio();
+            const id = b.dataset.h;
+            if (S.charge[id] >= 100) power(id);
+            else {
+              const h = HEROES.find((x) => x.id === id);
+              banner(h.power, h.text + ` · charges from ${h.rune === 'ward' ? 'shield' : h.rune} runes`);
+            }
+          }),
+        );
+    }
+    buildParty();
+    $('#chargeBtn').addEventListener('click', () => {
+      if (S.over) return;
+      HEROES.forEach((h) => (S.charge[h.id] = 100));
+      render();
+    });
+    $('#muteBtn').addEventListener('click', () => {
+      muted = !muted;
+      $('#muteBtn').style.opacity = muted ? 0.4 : 1;
+    });
+    $('#restartBtn').addEventListener('click', () => {
+      if (!S.busy) start();
+    });
+    function hideHint() {
+      $('#lockhint').style.opacity = 0;
+    }
+
+    /* ---------- state + render ---------- */
+    function setBar(el, frac, text) {
+      const i = el.querySelector('i'),
+        b = el.querySelector('b');
+      i.style.transform = `scaleX(${frac})`;
+      if (b) b.style.transform = `scaleX(${frac})`;
+      const n = el.querySelector('.num');
+      if (n && text != null) n.textContent = text;
+    }
+    function render() {
+      const v = S.foes.vexa;
+      setBar($('#vexaBar'), v.hp / v.max, `${v.hp} / ${v.max}`);
+      const w = wardsUp();
+      $('#wardedChip').hidden = !w || !WARDS;
+      $('#wardedChip').textContent = `Warded −${w * 25}%`;
+      $('#enragedChip').hidden = !v.enraged;
+      $('#vexaBurn').hidden = !v.burn;
+      $('#vexaBurn').textContent = `Burning ${v.burn}`;
+      const vcd = $('#vexaCd');
+      vcd.textContent = v.cd;
+      vcd.classList.toggle('soon', v.cd <= 1);
+      $('#vexaIntent').textContent =
+        !WARDS && v.next === 'hex'
+          ? `Hex curses ${v.enraged ? N.foes.vexa.rageCurse : N.foes.vexa.curse} runes into skulls`
+          : `${v.enraged ? 'Soul Rend' : 'Soul Lash'} hits the party for ${v.enraged ? N.foes.vexa.rageDmg : N.foes.vexa.dmg}`;
+      for (const k of ['left', 'right']) {
+        const f = S.foes[k],
+          p = pods[k];
+        setBar(p.querySelector('.bar'), f.hp / f.max);
+        const cd = p.querySelector('.cd');
+        cd.textContent = f.cd;
+        cd.classList.toggle('soon', f.cd <= 1);
+        const bb = p.querySelector('.burnb');
+        bb.style.display = f.burn ? 'block' : 'none';
+        bb.textContent = '🔥' + f.burn;
+        p.classList.toggle('broken', !f.alive);
+        p.classList.toggle('locked', S.lock === k);
+      }
+      pods.vexa.classList.toggle('locked', S.lock === 'vexa');
+      setBar($('#heroBar'), S.hp / S.maxHp, `${S.hp} / ${S.maxHp}`);
+      $('#armor').style.display = S.armor ? 'inline' : 'none';
+      $('#armor').textContent = `◈ ${S.armor}`;
+      for (const h of HEROES) {
+        const b = $(`.hc[data-h=${h.id}]`),
+          v = S.charge[h.id];
+        b.querySelector('.fill').style.transform = `scaleY(${v / 100})`;
+        b.querySelector('.pct').textContent = v >= 100 ? 'TAP' : v + '%';
+        b.classList.toggle('ready', v >= 100);
+      }
+    }
+    function checkEnd() {
+      if (S.over) return true;
+      if (S.foes.vexa.hp <= 0) {
+        S.over = true;
+        setTimeout(() => endCard(true), 500);
+        return true;
+      }
+      if (S.hp <= 0) {
+        S.over = true;
+        setTimeout(() => endCard(false), 500);
+        return true;
+      }
+      return false;
+    }
+    function endCard(won) {
+      const pct = S.hp / S.maxHp;
+      const tier = won ? (pct >= 0.6 ? 'Flawless victory' : 'Victory') : 'Defeat';
+      if (won) {
+        gsap.to('#stage .boss', { opacity: 0.25, filter: 'grayscale(1)', duration: 1 });
+        tone(523, 0.4);
+        setTimeout(() => tone(784, 0.6), 200);
+      }
+      const ov = $('#overlay');
+      ov.hidden = false;
+      ov.innerHTML = `<div class="card"><h1>${won ? 'Vexa falls' : 'The party falls'}</h1><div class="tier">${tier}</div>
+    <div class="stats">${S.moves} moves · Party ${S.hp} / ${S.maxHp} HP${won ? '' : ` · Vexa ${S.foes.vexa.hp} HP left`}</div>
+    <button class="btn" id="againBtn">${won ? 'Fight again' : 'Try again'}</button></div>`;
+      gsap.from(ov.querySelector('.card'), { scale: 0.8, opacity: 0, duration: 0.35, ease: 'back.out(2)' });
+      $('#againBtn').onclick = () => start();
+    }
+    function intro() {
+      const ov = $('#overlay');
+      ov.hidden = false;
+      ov.innerHTML = `<div class="card"><h1>Ember Runes</h1><p class="sub">Combat prototype</p>
+    <ul>
+      <li><div class="icons" style="flex-direction:column;gap:0"><img src="${IMG.blade}" alt=""></div><span>Swipe to swap runes and line up 3 or more. Blades, embers and rubies fly up and strike whatever stands above their column.</span></li>
+      <li><img src="${IMG.vial}" alt=""><span>Vials heal the party, shields give armor that blocks her hits.</span></li>
+      <li><img src="${HEROES[2].face}" alt="" style="border-radius:8px;object-fit:cover"><span>Each of the party charges from one rune: Kael from blades, Garran from shields, Mara from embers, Elin from vials. Rubies charge everyone. Tap a full portrait to use the power, for free.</span></li>
+      <li><div class="mini stone">ᛉ</div><span>${WARDS ? 'Two wards guard Vexa: each one standing cuts her damage taken by 25%. The number on each foe is turns until it acts.' : 'Vexa fights alone. Every 2 turns she acts, switching between Soul Lash (a heavy hit on the party, so keep armor up) and Hex (curses runes into skulls). Enraged at half health, she acts every turn. The red number is turns until she acts.'}</span></li>
+      <li><div class="mini">20</div><span>Match 4 to forge a d20 of that rune. Drag it up and let go to throw it at a foe (or just tap it). It rolls d20 + 2 against DC 12: a success adds the rune's power, a natural 20 crits and breaks its row, a 1 backfires. Match 5 for a golden die that rolls twice and keeps the best.</span></li>
+    </ul>
+    <button class="btn" id="goBtn">Fight</button></div>`;
+      $('#goBtn').onclick = async () => {
+        audio();
+        ov.hidden = true;
+        S.busy = true;
+        await dealBoard();
+        S.busy = false;
+        if (WARDS) {
+          $('#lockhint').style.opacity = 1;
+          setTimeout(hideHint, 5000);
+        }
+      };
+    }
+    function start(first = false) {
+      const F = N.foes;
+      S = {
+        hp: N.heroHp,
+        maxHp: N.heroHp,
+        armor: 0,
+        charge: Object.fromEntries(HEROES.map((h) => [h.id, 0])),
+        moves: 0,
+        lock: null,
+        busy: false,
+        over: false,
+        queue: [],
+        foes: {
+          left: { ...F.left, max: F.left.hp, cd: F.left.every, burn: 0, alive: true },
+          vexa: { ...F.vexa, max: F.vexa.hp, cd: F.vexa.every, burn: 0, alive: true, enraged: false },
+          right: { ...F.right, max: F.right.hp, cd: F.right.every, burn: 0, alive: true },
+        },
+      };
+      if (!WARDS) {
+        S.foes.left.alive = S.foes.right.alive = false;
+        S.foes.vexa.next = 'lash';
+        pods.left.hidden = pods.right.hidden = true;
+      }
+      $('#overlay').hidden = true;
+      gsap.set('#stage .boss', { opacity: 1, filter: 'none', scale: 1 });
+      if (WARDS) {
+        pods.left.classList.remove('broken');
+        pods.right.classList.remove('broken');
+      }
+      sel = null;
+      layout();
+      buildBoard();
+      render();
+      if (!first) {
+        S.busy = true;
+        dealBoard().then(() => {
+          S.busy = false;
+        });
+      }
+    }
+    addEventListener('resize', () => {
+      layout();
+      sizeP();
+    });
+    sizeP();
+    start(true);
+    intro();
+    window.__er = {
+      get S() {
+        return S;
+      },
+      get grid() {
+        return grid;
+      },
+      findGroups,
+      playSwap,
+      rollDie,
+      power,
+      key,
+      hasMoves,
+      HEROES,
+    };
+  })();
+</script>

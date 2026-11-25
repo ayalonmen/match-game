@@ -1,0 +1,2440 @@
+// The fight itself: DOM tiles moved by GSAP, a canvas for the glow, and an async flow (swap -> matches and cascades ->
+// the foes' turn). Ported from the approved prototype (docs/reference/ember-runes.src.html) with its numbers and timings.
+// Game decisions (the board, new runes, curses, dice) come from the seeded RNG before anything animates; Math.random
+// only places particles.
+import gsap from 'gsap';
+import {
+  COLS,
+  ROWS,
+  RUNES,
+  battleTier,
+  createRng,
+  findGroups as findTypeGroups,
+  hasMoves as typeHasMoves,
+  isRune,
+  key,
+  newBoard,
+  pick,
+  pickRune,
+  rc,
+  rollD20,
+  type BattleTier,
+  type CellType,
+  type DieTier,
+  type FoeRules,
+  type Group,
+  type Rune,
+  type Rules,
+  type TypeGrid,
+} from '../engine';
+import type { HeroDef, HeroId } from './heroes';
+import bladeImg from './assets/blade.webp';
+import emberImg from './assets/ember.webp';
+import wardImg from './assets/ward.webp';
+import vialImg from './assets/vial.webp';
+import rubyImg from './assets/ruby.webp';
+import skullImg from './assets/skull.webp';
+
+const IMG: Record<Rune | 'skull', string> = {
+  blade: bladeImg,
+  ember: emberImg,
+  ward: wardImg,
+  vial: vialImg,
+  ruby: rubyImg,
+  skull: skullImg,
+};
+
+export interface BattleResult {
+  outcome: 'win' | 'loss';
+  tier: BattleTier;
+  hpLeft: number;
+  maxHp: number;
+  moves: number;
+  enemyHpLeft: number;
+  enemyMaxHp: number;
+}
+
+export interface ControllerOptions {
+  rules: Rules;
+  heroes: HeroDef[];
+  enemyName: string;
+  enemyImage: string;
+  seed: number;
+  /** Show the how-to-play card with a Fight button first; otherwise the board deals in at once. */
+  intro: boolean;
+  introTitle: string;
+  introSub: string;
+  /** The test buttons: charge the whole party, restart. */
+  devTools: boolean;
+  allowRetry: boolean;
+  mustWin: boolean;
+  /** When set, the end card offers Continue. */
+  hasContinue: boolean;
+  onEnd: (r: BattleResult) => void;
+  onContinue: (r: BattleResult) => void;
+}
+
+export interface BattleHandle {
+  destroy(): void;
+  /** For tests and the demo. */
+  debug: {
+    readonly state: State;
+    readonly types: TypeGrid;
+    playSwap(a: number, b: number): Promise<void>;
+    rollDie(r: number, c: number, target?: Zone): Promise<void>;
+    power(id: HeroId): Promise<void>;
+  };
+}
+
+export type Zone = 'left' | 'vexa' | 'right';
+type Die = 'd20' | 'd20a';
+interface Tile {
+  id: number;
+  type: CellType;
+  el: HTMLDivElement;
+  rune: Rune;
+}
+export interface Foe extends FoeRules {
+  max: number;
+  cd: number;
+  burn: number;
+  alive: boolean;
+  enraged: boolean;
+  next: 'lash' | 'hex';
+}
+export interface State {
+  hp: number;
+  maxHp: number;
+  armor: number;
+  charge: Record<HeroId, number>;
+  moves: number;
+  lock: Zone | null;
+  busy: boolean;
+  over: boolean;
+  queue: [string, string][];
+  foes: Record<Zone, Foe>;
+}
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  decay: number;
+  size: number;
+  col: string;
+  drag: number;
+  grav: number;
+  grow: number;
+  ring?: boolean;
+}
+interface Slash {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  bow: number;
+  t: number;
+  life: number;
+  scale: number;
+  glow: string;
+}
+interface Wall {
+  t: number;
+  life: number;
+  y: number;
+  fade?: boolean;
+}
+interface Orb {
+  x: number;
+  y: number;
+  r: number;
+  col: string;
+  seed: number;
+}
+interface Arrow {
+  t: number;
+  big: boolean;
+  trail: [number, number][];
+  x0: number;
+  y0: number;
+  cx: number;
+  cy: number;
+  x1: number;
+  y1: number;
+}
+type Spawn = [number, Die, Rune];
+
+const ZONES: Zone[] = ['left', 'vexa', 'right'];
+const FIRE = ['rgba(255,170,60,1)', 'rgba(255,110,30,1)', 'rgba(255,220,120,1)', 'rgba(255,70,20,1)'];
+const STEEL = ['rgba(220,235,255,1)', 'rgba(140,185,255,1)', 'rgba(255,230,170,1)'];
+const COL: Record<Rune | 'skull', string[]> = {
+  blade: STEEL,
+  ember: FIRE,
+  ruby: ['rgba(255,60,80,1)', 'rgba(255,150,170,1)', 'rgba(200,20,50,1)'],
+  ward: ['rgba(120,190,255,1)', 'rgba(255,220,140,1)', 'rgba(200,230,255,1)'],
+  vial: ['rgba(110,230,120,1)', 'rgba(200,255,160,1)', 'rgba(60,200,90,1)'],
+  skull: ['rgba(170,90,255,1)', 'rgba(120,60,200,1)', 'rgba(220,170,255,1)'],
+};
+const TIER: Record<DieTier, string> = {
+  crit: 'Natural 20 · critical',
+  success: 'Success',
+  fail: 'Fail',
+  fumble: 'Natural 1 · fumble',
+};
+const esc = (t: string) =>
+  t.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] ?? ch);
+const isDie = (t: CellType | null): t is Die => t === 'd20' || t === 'd20a';
+const strikes = (t: CellType): t is 'blade' | 'ember' | 'ruby' => t === 'blade' || t === 'ember' || t === 'ruby';
+const num = (v: string | number) => Number(v);
+
+function markup(o: ControllerOptions) {
+  const E = esc(o.enemyName),
+    F = o.rules.foes;
+  return `<div class="er-app">
+  <div class="er-stage">
+    <img class="er-boss" src="${esc(o.enemyImage)}" alt="${E}">
+    <div class="er-boss-flash"></div>
+    <div class="er-shade"></div>
+    <div class="er-bossbar${o.devTools ? '' : ' er-few-tools'}">
+      <div class="er-row"><span class="er-name">${E}</span><span class="er-chip er-warded">Warded</span><span class="er-chip er-enraged" hidden>Enraged</span><span class="er-chip er-burn er-vexa-burn" hidden></span></div>
+      <div class="er-bar er-vexa-bar"><b></b><i></i><span class="er-num"></span></div>
+      <div class="er-row"><span class="er-cd er-vexa-cd">3</span><span class="er-intent"></span></div>
+    </div>
+    <div class="er-tools">${o.devTools ? '<button class="er-charge-btn" aria-label="Charge the whole party (test)" title="Charge the party (test)">⚡</button>' : ''}<button class="er-mute-btn" aria-label="Sound on or off">♪</button>${o.devTools ? '<button class="er-restart-btn" aria-label="Restart fight">↻</button>' : ''}</div>
+    <div class="er-lockhint">Tap a ward or ${E} to aim every rune at it</div>
+    <div class="er-lanes">
+      <div class="er-vexa-mark" aria-label="Aim at ${E}"><div class="er-reticle"></div></div>
+      <div class="er-pod" data-foe="left" aria-label="${esc(F.left.name)}"><div class="er-stone">ᚦ<span class="er-cd">3</span><span class="er-burnb"></span></div><div class="er-bar"><b></b><i></i></div><div class="er-label">${esc(F.left.name)}</div></div>
+      <div class="er-pod" data-foe="right" aria-label="${esc(F.right.name)}"><div class="er-stone">ᛉ<span class="er-cd">4</span><span class="er-burnb"></span></div><div class="er-bar"><b></b><i></i></div><div class="er-label">${esc(F.right.name)}</div></div>
+    </div>
+  </div>
+  <div class="er-combo-wrap"><div class="er-combo"></div></div>
+  <div class="er-board-wrap"><div class="er-board"><div class="er-slots"></div></div></div>
+  <div class="er-hero">
+    <div class="er-party-top"><span class="er-hero-name">Party</span><div class="er-bar er-hero-bar"><b></b><i></i><span class="er-num"></span></div><span class="er-armor"></span></div>
+    <div class="er-party"></div>
+  </div>
+  <div class="er-red-flash"></div>
+  <div class="er-fx"></div>
+  <canvas class="er-pfx"></canvas>
+  <div class="er-aim"></div>
+  <div class="er-cutin"><div class="er-dim"></div><div class="er-band"><div class="er-lines"></div></div><img class="er-cut-hero" alt=""><div class="er-title"></div><div class="er-who"></div><div class="er-flash"></div></div>
+  <div class="er-banner"></div>
+  <div class="er-overlay" hidden></div>
+</div>`;
+}
+
+export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHandle {
+  const N = o.rules,
+    WARDS = N.wards,
+    HEROES = o.heroes,
+    E = esc(o.enemyName);
+  const rng = createRng(o.seed);
+  const rand = (n: number) => pick(rng, n); // game decisions
+  const rnd = (n: number) => Math.floor(Math.random() * n); // looks only
+  const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const prevScale = gsap.globalTimeline.timeScale();
+  if (reduce) gsap.globalTimeline.timeScale(3);
+
+  root.classList.add('er-root');
+  root.innerHTML = markup(o);
+  const $ = <T extends Element = HTMLElement>(s: string) => root.querySelector(s) as T;
+  const app = $('.er-app'),
+    stage = $('.er-stage'),
+    boss = $<HTMLImageElement>('.er-boss'),
+    bossFlash = $('.er-boss-flash'),
+    redFlash = $('.er-red-flash'),
+    board = $('.er-board'),
+    slots = $('.er-slots'),
+    fx = $('.er-fx'),
+    heroBox = $('.er-hero'),
+    heroBar = $('.er-hero-bar'),
+    aim = $('.er-aim'),
+    overlay = $('.er-overlay'),
+    lockhint = $('.er-lockhint');
+  const pods: Record<Zone, HTMLElement> = {
+    left: $('.er-pod[data-foe=left]'),
+    right: $('.er-pod[data-foe=right]'),
+    vexa: $('.er-vexa-mark'),
+  };
+  let S!: State;
+  let grid: (Tile | null)[][] = [];
+  let s = 56,
+    uid = 0,
+    sel: number | null = null,
+    muted = false,
+    dead = false;
+
+  /* ---------- timers that stop with the fight ---------- */
+  const timers = new Set<number>();
+  function later(fn: () => void, ms: number) {
+    const id = window.setTimeout(() => {
+      timers.delete(id);
+      if (!dead) fn();
+    }, ms);
+    timers.add(id);
+  }
+  const wait = (ms: number) => new Promise<void>((r) => later(r, ms / (reduce ? 3 : 1)));
+  const tw = (t: gsap.TweenTarget, v: gsap.TweenVars) =>
+    new Promise<void>((r) => {
+      gsap.to(t, {
+        ...v,
+        onComplete: () => {
+          if (!dead) r();
+        },
+      });
+    });
+
+  /* ---------- sound (tiny synth) ---------- */
+  let ac: AudioContext | null = null;
+  function audio() {
+    if (!ac) {
+      try {
+        const Ctx =
+          window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (Ctx) ac = new Ctx();
+      } catch {
+        ac = null;
+      }
+    }
+    if (ac && ac.state === 'suspended') void ac.resume();
+  }
+  function tone(f: number, d = 0.12, type: OscillatorType = 'triangle', v = 0.12, slide = 0) {
+    if (muted || !ac) return;
+    const t = ac.currentTime,
+      osc = ac.createOscillator(),
+      g = ac.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(f, t);
+    if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(30, f * slide), t + d);
+    g.gain.setValueAtTime(v, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    osc.connect(g).connect(ac.destination);
+    osc.start(t);
+    osc.stop(t + d);
+  }
+  function thud(v = 0.25) {
+    if (muted || !ac) return;
+    const t = ac.currentTime,
+      len = 0.18,
+      b = ac.createBuffer(1, ac.sampleRate * len, ac.sampleRate),
+      d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+    const src = ac.createBufferSource(),
+      g = ac.createGain(),
+      f = ac.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 900;
+    src.buffer = b;
+    g.gain.value = v;
+    src.connect(f).connect(g).connect(ac.destination);
+    src.start(t);
+    tone(70, 0.2, 'sine', v * 0.8, 0.5);
+  }
+
+  /* ---------- helpers ---------- */
+  const type = (r: number, c: number): CellType | null =>
+    r >= 0 && r < ROWS && c >= 0 && c < COLS && grid[r][c] ? grid[r][c]!.type : null;
+  const tile = (r: number, c: number) => grid[r][c] as Tile;
+  const types = (): TypeGrid => grid.map((row) => row.map((t) => (t ? t.type : null)));
+  const findGroups = () => findTypeGroups(types());
+  const hasMoves = () => typeHasMoves(types());
+  const heroOf = (t: Rune) => HEROES.find((h) => h.rune === t)!;
+  function appXY(el: Element): [number, number] {
+    const a = app.getBoundingClientRect(),
+      b = el.getBoundingClientRect();
+    return [b.left - a.left + b.width / 2, b.top - a.top + b.height / 2];
+  }
+  function cellXY(r: number, c: number): [number, number] {
+    const a = app.getBoundingClientRect(),
+      b = board.getBoundingClientRect();
+    return [b.left - a.left + (c + 0.5) * s, b.top - a.top + (r + 0.5) * s];
+  }
+
+  /* ---------- board ---------- */
+  function dieHTML(t: Die, rune: Rune, size: number) {
+    return `<div class="er-die er-r-${rune} ${t === 'd20a' ? 'er-adv' : ''}" style="--s:${size}"><span class="er-dn">20</span></div><img class="er-dr" src="${IMG[rune]}" alt="">`;
+  }
+  function makeTile(t: CellType, r: number, c: number, rune: Rune = 'ruby'): Tile {
+    const el = document.createElement('div');
+    el.className = 'er-tile er-t-' + t;
+    el.style.width = el.style.height = s + 'px';
+    if (isDie(t))
+      el.innerHTML =
+        (t === 'd20a' ? '<div class="er-rays"></div>' : '') +
+        '<div class="er-halo"></div>' +
+        dieHTML(t, rune, s) +
+        (t === 'd20a' ? '<span class="er-advb">ADV</span>' : '');
+    else el.innerHTML = `<img src="${IMG[t]}" alt="">`;
+    board.appendChild(el);
+    gsap.set(el, { x: c * s, y: r * s });
+    return { id: ++uid, type: t, el, rune };
+  }
+  function buildBoard() {
+    board.querySelectorAll('.er-tile').forEach((e) => e.remove());
+    const g = newBoard(rng);
+    grid = g.map((row, r) => row.map((t, c) => makeTile(t!, r, c)));
+    gsap.set(board.querySelectorAll('.er-tile'), { opacity: 0 });
+  }
+  // rune landing: squash from the bottom, spring back, a puff of its colour after a long fall
+  function land(el: HTMLElement, dist: number, t: CellType, r: number, c: number) {
+    gsap
+      .timeline()
+      .set(el, { transformOrigin: '50% 100%' })
+      .to(el, { scaleY: 0.78, scaleX: 1.16, duration: 0.07, ease: 'power1.out' })
+      .to(el, { scaleY: 1, scaleX: 1, duration: 0.45, ease: 'elastic.out(1,0.35)' })
+      .set(el, { transformOrigin: '50% 50%' });
+    const C = t in COL ? COL[t as Rune | 'skull'] : null;
+    if (dist >= 1.5 && C) {
+      const [x, y] = cellXY(r, c);
+      for (let i = 0; i < 4; i++)
+        emit({
+          x: x + (Math.random() - 0.5) * s * 0.7,
+          y: y + s * 0.4,
+          vx: (Math.random() - 0.5) * 2.2,
+          vy: -0.6 - Math.random() * 0.8,
+          drag: 0.9,
+          decay: 0.06,
+          size: 1.5 + Math.random() * 2,
+          col: C[i % C.length],
+        });
+    }
+  }
+  // a falling rune: gravity (slow start, fast end), stretched while it falls
+  function fall(el: HTMLElement, toY: number, dist: number, delay: number) {
+    const dur = 0.13 + Math.sqrt(Math.max(0.2, dist)) * 0.12;
+    gsap.fromTo(
+      el,
+      { scaleY: 1, scaleX: 1 },
+      { scaleY: 1.08, scaleX: 0.95, duration: dur * 0.6, delay, ease: 'power1.in' },
+    );
+    return tw(el, { y: toY, duration: dur, delay, ease: 'power2.in' });
+  }
+  // the board deals in: slots light up from the middle, a gold line runs over the top, then the runes rain in column by column
+  async function dealBoard() {
+    const slotEls = [...slots.children];
+    gsap.fromTo(
+      slotEls,
+      { opacity: 0, scale: 0.4 },
+      {
+        opacity: 1,
+        scale: 1,
+        duration: 0.35,
+        ease: 'back.out(2)',
+        stagger: { each: 0.012, grid: [ROWS, COLS], from: 'center' },
+      },
+    );
+    const b = board.getBoundingClientRect(),
+      a = app.getBoundingClientRect();
+    later(
+      () =>
+        slash(
+          b.left - a.left,
+          b.top - a.top + 2,
+          b.right - a.left,
+          b.top - a.top + 2,
+          0,
+          0.45,
+          0.35,
+          'rgba(255,190,90,0.55)',
+          true,
+        ),
+      150,
+    );
+    tone(196, 0.5, 'triangle', 0.06, 2);
+    await wait(320);
+    const jobs: Promise<void>[] = [];
+    for (let c = 0; c < COLS; c++)
+      for (let r = ROWS - 1; r >= 0; r--) {
+        const t = tile(r, c),
+          start = -s * (1.2 + (ROWS - 1 - r) * 1.15),
+          delay = c * 0.06 + (ROWS - 1 - r) * 0.05;
+        gsap.set(t.el, { y: start, opacity: 1 });
+        jobs.push(
+          fall(t.el, r * s, (r * s - start) / s, delay).then(() => {
+            land(t.el, 2, t.type, r, c);
+            if (r === 0) tone(330 + c * 40, 0.05, 'sine', 0.05);
+          }),
+        );
+      }
+    await Promise.all(jobs);
+  }
+  function layout() {
+    const w = Math.min(app.clientWidth - 16, 456);
+    s = Math.floor(w / COLS);
+    const room = app.clientHeight - 26 - heroBox.offsetHeight - 170;
+    if (room < s * ROWS) s = Math.max(36, Math.floor(room / ROWS));
+    board.style.width = s * COLS + 'px';
+    board.style.height = s * ROWS + 'px';
+    slots.style.gridTemplateColumns = `repeat(${COLS},1fr)`;
+    if (!slots.children.length) for (let i = 0; i < COLS * ROWS; i++) slots.appendChild(document.createElement('div'));
+    const lanes = $('.er-lanes');
+    lanes.style.width = s * COLS + 'px';
+    lanes.style.marginLeft = -(s * COLS) / 2 + 'px';
+    pods.left.style.left = s * 1 + 'px';
+    pods.right.style.left = s * 6 + 'px';
+    for (let r = 0; r < grid.length; r++)
+      for (let c = 0; c < COLS; c++) {
+        const t = grid[r][c];
+        if (t) {
+          t.el.style.width = t.el.style.height = s + 'px';
+          gsap.set(t.el, { x: c * s, y: r * s });
+          const d = t.el.querySelector<HTMLElement>('.er-die');
+          if (d) d.style.setProperty('--s', String(s));
+        }
+      }
+  }
+  function swapData(a: number, b: number) {
+    const [r1, c1] = rc(a),
+      [r2, c2] = rc(b);
+    const t = grid[r1][c1];
+    grid[r1][c1] = grid[r2][c2];
+    grid[r2][c2] = t;
+  }
+  async function reshuffle() {
+    banner('No moves', 'The runes reshape');
+    await wait(600);
+    do {
+      for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS; c++) {
+          const t = grid[r][c];
+          if (t && isRune(t.type)) {
+            const nt = pickRune(types(), r, c, rng);
+            if (nt !== t.type) {
+              t.el.remove();
+              grid[r][c] = makeTile(nt, r, c);
+              gsap.from(tile(r, c).el, { scale: 0, duration: 0.3, delay: Math.random() * 0.2 });
+            }
+          }
+        }
+    } while (!hasMoves() || findGroups().length);
+    await wait(400);
+  }
+  async function collapse() {
+    const jobs: { t: Tile; r: number; c: number; dist: number; order: number }[] = [];
+    for (let c = 0; c < COLS; c++) {
+      let w = ROWS - 1,
+        order = 0;
+      for (let r = ROWS - 1; r >= 0; r--)
+        if (grid[r][c]) {
+          if (w !== r) {
+            const t = tile(r, c);
+            grid[w][c] = t;
+            grid[r][c] = null;
+            jobs.push({ t, r: w, c, dist: w - r, order: order++ });
+          }
+          w--;
+        }
+      for (let r = w; r >= 0; r--) {
+        // new runes wait just above the board (it clips them) in a loose stack
+        const t = makeTile(RUNES[rand(RUNES.length)], r, c),
+          startY = (r - w - 1) * s * 1.12 - s * 0.15;
+        gsap.set(t.el, { y: startY });
+        grid[r][c] = t;
+        jobs.push({ t, r, c, dist: (r * s - startY) / s, order: order++ });
+      }
+    }
+    if (!jobs.length) return;
+    const landed = new Set<number>();
+    await Promise.all(
+      jobs.map((j) =>
+        fall(j.t.el, j.r * s, j.dist, j.order * 0.035 + j.c * 0.012).then(() => {
+          land(j.t.el, j.dist, j.t.type, j.r, j.c);
+          if (!landed.has(j.c)) {
+            landed.add(j.c);
+            tone(200 + j.c * 25, 0.05, 'sine', 0.04);
+          }
+        }),
+      ),
+    );
+    await wait(90);
+  }
+
+  /* ---------- targets ---------- */
+  function zone(c: number): Zone {
+    if (S.lock && S.foes[S.lock].alive) return S.lock;
+    const z: Zone = c <= 1 ? 'left' : c >= 5 ? 'right' : 'vexa';
+    return S.foes[z].alive ? z : 'vexa';
+  }
+  const wardsUp = () => (S.foes.left.alive ? 1 : 0) + (S.foes.right.alive ? 1 : 0);
+  const foeXY = (k: Zone) => (k === 'vexa' ? appXY(pods.vexa) : appXY(pods[k].querySelector('.er-stone')!));
+  const liveFoe = (k: Zone) => S.foes[S.foes[k].alive ? k : 'vexa'];
+  function float(text: string | number, cls: string, x: number, y: number) {
+    const el = document.createElement('div');
+    el.className = 'er-float er-f-' + cls;
+    el.textContent = String(text);
+    fx.appendChild(el);
+    gsap.set(el, { x: x + (Math.random() * 30 - 15), y });
+    gsap.fromTo(el, { scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.18, ease: 'back.out(2)' });
+    gsap.to(el, {
+      y: y - 46,
+      opacity: 0,
+      duration: 0.7,
+      delay: 0.45,
+      ease: 'power1.in',
+      onComplete: () => el.remove(),
+    });
+  }
+  function hit(k: Zone, amt: number, cls = 'dmg') {
+    let f = S.foes[k];
+    if (!f.alive) {
+      k = 'vexa';
+      f = S.foes.vexa;
+    }
+    if (k === 'vexa') amt *= 1 - N.wardShield * wardsUp();
+    amt = Math.max(1, Math.round(amt));
+    f.hp = Math.max(0, f.hp - amt);
+    const [x, y] = foeXY(k);
+    float(amt, cls, x, y - 10);
+    const tgt = k === 'vexa' ? boss : pods[k].querySelector('.er-stone')!;
+    gsap.fromTo(tgt, { x: -5 }, { x: 0, duration: 0.25, ease: 'elastic.out(1,.3)' });
+    if (k === 'vexa') gsap.fromTo(bossFlash, { opacity: 0.55 }, { opacity: 0, duration: 0.3 });
+    thud(cls === 'crit' ? 0.4 : 0.18);
+    if (f.hp <= 0 && k !== 'vexa') breakWard(k);
+    if (k === 'vexa' && !f.enraged && f.hp > 0 && f.hp <= f.max / 2) {
+      f.enraged = true;
+      f.every = N.foes.vexa.rageEvery;
+      f.cd = Math.min(f.cd, f.every);
+      S.queue.push([`${E} enraged`, f.every === 1 ? 'She strikes every turn' : `She strikes every ${f.every} turns`]);
+    }
+    render();
+  }
+  function breakWard(k: Zone) {
+    const f = S.foes[k];
+    f.alive = false;
+    f.burn = 0;
+    if (S.lock === k) S.lock = null;
+    S.foes.vexa.cd += 1;
+    gsap.fromTo(pods[k].querySelector('.er-stone'), { scale: 1.4 }, { scale: 1, duration: 0.5, ease: 'power2.out' });
+    pods[k].classList.add('er-broken');
+    S.queue.push([esc(f.name) + ' shattered', `${E} is exposed · her next attack is delayed`]);
+    tone(880, 0.4, 'sawtooth', 0.08, 0.3);
+  }
+  async function flushBanners() {
+    while (S.queue.length) {
+      const [a, b] = S.queue.shift()!;
+      banner(a, b);
+      await wait(1100);
+    }
+  }
+  function banner(a: string, b = '') {
+    const el = $('.er-banner');
+    el.innerHTML = a + (b ? `<small>${b}</small>` : '');
+    gsap.killTweensOf(el);
+    gsap.fromTo(el, { opacity: 0, scale: 1.3 }, { opacity: 1, scale: 1, duration: 0.25, ease: 'back.out(2)' });
+    gsap.to(el, { opacity: 0, duration: 0.3, delay: 1 });
+  }
+  function showCombo(n: number, m: number) {
+    const el = $('.er-combo');
+    el.textContent = `Combo ${n} · ×${m.toFixed(2).replace(/0$/, '')}`;
+    gsap.killTweensOf(el);
+    gsap.fromTo(el, { opacity: 1, scale: 1.5 }, { scale: 1, duration: 0.25, ease: 'back.out(3)' });
+    gsap.to(el, { opacity: 0, duration: 0.4, delay: 0.9 });
+    tone(440 * Math.pow(1.12, n), 0.15, 'triangle', 0.1);
+  }
+  function addCharge(t: Rune, n: number) {
+    if (t === 'ruby') HEROES.forEach((h) => (S.charge[h.id] = Math.min(100, S.charge[h.id] + N.rubyCharge * n)));
+    else {
+      const h = heroOf(t);
+      S.charge[h.id] = Math.min(100, S.charge[h.id] + N.charge * n);
+    }
+  }
+
+  /* ---------- striking ---------- */
+  // Every rune in `cells` flies on its own (Battle Focus' blades, a critical die's row).
+  async function strike(
+    cells: number[],
+    m: number,
+    opts: { steel?: boolean; finale?: (zones: Zone[]) => Promise<void> } = {},
+  ) {
+    const byZone: Partial<Record<Zone, number>> = {};
+    let heal = 0,
+      armor = 0;
+    const charge: Partial<Record<Rune, number>> = {};
+    const flights: Promise<void>[] = [];
+    for (const k of cells) {
+      const [r, c] = rc(k),
+        t = type(r, c);
+      if (!t || isDie(t)) continue;
+      const [x, y] = cellXY(r, c);
+      if (t === 'skull') {
+        gsap.to(tile(r, c).el, { scale: 1.4, opacity: 0, duration: 0.25 });
+        continue;
+      }
+      charge[t] = (charge[t] ?? 0) + 1;
+      let dest: [number, number];
+      if (strikes(t)) {
+        const z = zone(c);
+        byZone[z] = (byZone[z] ?? 0) + N[t] * m;
+        dest = foeXY(z);
+      } else if (t === 'vial') {
+        heal += N.vial * m;
+        dest = appXY(heroBar);
+      } else {
+        armor += N.ward * m;
+        dest = appXY(heroBar);
+      }
+      breakFx(t, x, y, 1);
+      const p = document.createElement('img');
+      p.className = 'er-proj';
+      p.src = IMG[t];
+      fx.appendChild(p);
+      if (opts.steel) {
+        const z = s * 0.86 * 1.3;
+        p.style.width = p.style.height = z + 'px';
+        p.style.margin = `${-z / 2}px 0 0 ${-z / 2}px`;
+      }
+      gsap.set(p, { x, y });
+      tile(r, c).el.style.opacity = '0';
+      if (opts.steel) {
+        // Battle Focus: blades spin up through a steel-light trail
+        const dx = dest[0] + (Math.random() * 40 - 20),
+          dy = dest[1] + (Math.random() * 30 - 15);
+        const d0 = flights.length * 0.05;
+        gsap.to(p, { rotation: 540, duration: 0.5, delay: d0 * 0.4, ease: 'power2.in' });
+        flights.push(
+          tw(p, {
+            x: dx,
+            y: dy,
+            rotation: '+=1080',
+            duration: 0.42 + Math.random() * 0.12,
+            ease: 'power3.in',
+            delay: 0.5 + d0,
+            onUpdate: () => {
+              const qx = num(gsap.getProperty(p, 'x')),
+                qy = num(gsap.getProperty(p, 'y'));
+              for (let j = 0; j < 2; j++)
+                emit({
+                  x: qx,
+                  y: qy,
+                  vx: Math.random() - 0.5,
+                  vy: Math.random() - 0.5,
+                  drag: 0.92,
+                  decay: 0.06,
+                  size: 3 + Math.random() * 4,
+                  col: STEEL[rnd(3)],
+                });
+            },
+          }).then(() => {
+            p.remove();
+            sparks(dx, dy, 14);
+            tone(1200 + rnd(400), 0.05, 'square', 0.03);
+          }),
+        );
+      } else {
+        const tc = COL[t];
+        flights.push(
+          tw(p, {
+            x: dest[0],
+            y: dest[1],
+            scale: 0.55,
+            duration: 0.32 + Math.random() * 0.1,
+            ease: 'power2.in',
+            delay: flights.length * 0.015,
+            onUpdate: () =>
+              emit({
+                x: num(gsap.getProperty(p, 'x')),
+                y: num(gsap.getProperty(p, 'y')),
+                vx: Math.random() - 0.5,
+                vy: Math.random() - 0.5,
+                drag: 0.9,
+                decay: 0.06,
+                size: 2 + Math.random() * 3,
+                col: tc[rnd(tc.length)],
+              }),
+          }).then(() => {
+            p.remove();
+            if (t !== 'vial' && t !== 'ward') impactFx(t, dest[0], dest[1], 1);
+          }),
+        );
+      }
+    }
+    tone(520, 0.08, 'square', 0.04);
+    await Promise.all(flights);
+    if (opts.finale) await opts.finale(Object.keys(byZone) as Zone[]);
+    for (const z of Object.keys(byZone) as Zone[]) hit(z, byZone[z]!, m >= 2 ? 'crit' : 'dmg');
+    if (heal) {
+      const real = Math.min(Math.round(heal), S.maxHp - S.hp);
+      S.hp += real;
+      const [x, y] = appXY(heroBar);
+      float('+' + Math.round(heal), 'heal', x, y - 16);
+    }
+    if (armor) {
+      const before = S.armor;
+      S.armor = Math.min(N.armorCap, S.armor + Math.round(armor));
+      const [x, y] = appXY(heroBar);
+      float('+' + (S.armor - before) + ' armor', 'armor', x + 40, y - 16);
+    }
+    for (const t of Object.keys(charge) as Rune[]) addCharge(t, charge[t]!);
+    render();
+  }
+  // matching: each group squeezes into one ball of light, then the light flies to its target
+  async function strikeGroups(groups: Group[], extra: number[], m: number, combo: number, spawns: Spawn[]) {
+    const ks = 1 + 0.35 * (combo - 1);
+    if (combo >= 3 && !reduce) gsap.fromTo(app, { x: -3 * combo }, { x: 0, duration: 0.45, ease: 'elastic.out(1,.3)' });
+    for (const k of extra) {
+      const [r, c] = rc(k);
+      if (type(r, c) === 'skull') {
+        const [x, y] = cellXY(r, c),
+          el = tile(r, c).el;
+        breakFx('skull', x, y, 1);
+        grid[r][c] = null;
+        gsap.to(el, { scale: 1.4, opacity: 0, duration: 0.25, onComplete: () => el.remove() });
+      }
+    }
+    tone(520, 0.08, 'square', 0.04);
+    await Promise.all(
+      groups.map((g, gi) =>
+        orbGroup(
+          g,
+          gi,
+          m,
+          ks,
+          spawns.find((sp) => g.cells.includes(sp[0])),
+        ),
+      ),
+    );
+    render();
+  }
+  async function orbGroup(g: Group, gi: number, m: number, ks: number, spawn?: Spawn) {
+    const t = g.t,
+      n = g.cells.length,
+      C = COL[t];
+    let ar = 0,
+      ac2 = 0;
+    if (spawn) [ar, ac2] = rc(spawn[0]);
+    else
+      for (const k of g.cells) {
+        const [r, c] = rc(k);
+        ar += r / n;
+        ac2 += c / n;
+      }
+    const [ox, oy] = cellXY(ar, ac2);
+    runLine(g);
+    await wait(gi * 70);
+    // 1. squeeze: the runes slide into the gather point, light streams with them
+    const els = g.cells.map((k) => {
+      const [r, c] = rc(k),
+        el = tile(r, c).el,
+        [x, y] = cellXY(r, c);
+      grid[r][c] = null;
+      for (let i = 0; i < 5; i++)
+        emit({
+          x: x + Math.random() * 14 - 7,
+          y: y + Math.random() * 14 - 7,
+          vx: (ox - x) / 12,
+          vy: (oy - y) / 12,
+          drag: 0.9,
+          decay: 0.05,
+          size: 2 + Math.random() * 3,
+          col: C[i % C.length],
+        });
+      return el;
+    });
+    await Promise.all(
+      els.map((el) =>
+        tw(el, { x: ac2 * s, y: ar * s, scale: 0.3, opacity: 0, duration: 0.24, ease: 'power2.in' }).then(() =>
+          el.remove(),
+        ),
+      ),
+    );
+    // 2. the light is born
+    const orb: Orb = { x: ox, y: oy, r: 0, col: C[0], seed: Math.random() * 6 };
+    orbs.push(orb);
+    kick();
+    ring(ox, oy, C[C.length > 2 ? 2 : 0], 2.5, 8);
+    tone(420 + gi * 90, 0.14, 'sine', 0.08, 1.7);
+    await tw(orb, { r: s * (0.16 + 0.03 * n) * Math.min(1.5, ks), duration: 0.18, ease: 'back.out(3)' });
+    if (spawn) {
+      // 4 and 5: hold, then the d20 forms where the runes met
+      await wait(260);
+      const [r, c] = rc(spawn[0]),
+        gold = spawn[1] === 'd20a';
+      grid[r][c] = makeTile(spawn[1], r, c, spawn[2]);
+      gsap.from(tile(r, c).el, { scale: 0, rotation: -180, duration: 0.45, ease: 'back.out(2)' });
+      forgeFx(r, c, gold);
+      await wait(320);
+    } else await wait(80);
+    // 3. the light flies to its target
+    let dest: [number, number], apply: () => void;
+    if (strikes(t)) {
+      const z = zone(Math.round(ac2));
+      dest = foeXY(z);
+      if (!WARDS) dest = [cellXY(0, ac2)[0], dest[1] + (Math.random() * 40 - 20)];
+      const d = dest;
+      apply = () => {
+        hit(z, N[t] * n * m, m >= 2 ? 'crit' : 'dmg');
+        if (t === 'ember') {
+          const f = liveFoe(z);
+          if (f.alive) f.burn++;
+        }
+        impactFx(t, d[0], d[1], ks * 1.6);
+        ring(d[0], d[1], C[0], 3, 8);
+      };
+    } else if (t === 'vial') {
+      const d = (dest = appXY(heroBar));
+      apply = () => {
+        const h = N.vial * n * m,
+          real = Math.min(Math.round(h), S.maxHp - S.hp);
+        S.hp += real;
+        float('+' + Math.round(h), 'heal', d[0], d[1] - 16);
+        impactFx(t, d[0], d[1], ks);
+      };
+    } else {
+      const d = (dest = appXY(heroBar));
+      apply = () => {
+        const before = S.armor;
+        S.armor = Math.min(N.armorCap, S.armor + Math.round(N.ward * n * m));
+        float('+' + (S.armor - before) + ' armor', 'armor', d[0] + 40, d[1] - 16);
+        ring(d[0], d[1], 'rgba(170,215,255,1)', 3, 10);
+      };
+    }
+    const cx = (ox + dest[0]) / 2 + (Math.random() * 80 - 40),
+      cy = Math.min(oy, dest[1]) - (dest[1] < oy ? 40 : 60),
+      prog = { t: 0 };
+    await tw(prog, {
+      t: 1,
+      duration: 0.36,
+      ease: 'power2.in',
+      onUpdate: () => {
+        const u = 1 - prog.t;
+        orb.x = u * u * ox + 2 * u * prog.t * cx + prog.t * prog.t * dest[0];
+        orb.y = u * u * oy + 2 * u * prog.t * cy + prog.t * prog.t * dest[1];
+        for (let i = 0; i < 2; i++)
+          emit({
+            x: orb.x,
+            y: orb.y,
+            vx: Math.random() - 0.5,
+            vy: Math.random() - 0.5,
+            drag: 0.9,
+            decay: 0.05,
+            size: orb.r * (0.4 + Math.random() * 0.5),
+            col: C[rnd(C.length)],
+          });
+      },
+    });
+    orbs.splice(orbs.indexOf(orb), 1);
+    addCharge(t, n);
+    apply();
+    render();
+  }
+  function removeCells(cells: number[]) {
+    for (const k of cells) {
+      const [r, c] = rc(k),
+        t = grid[r][c];
+      if (t) {
+        gsap.to(t.el, { scale: 0, opacity: 0, duration: 0.15, onComplete: () => t.el.remove() });
+        grid[r][c] = null;
+      }
+    }
+  }
+
+  async function resolve(origin: number | null, mult = 1) {
+    let combo = 0;
+    while (!S.over) {
+      const groups = findGroups();
+      if (!groups.length) break;
+      combo++;
+      const m = (1 + N.comboStep * (combo - 1)) * mult;
+      mult = 1;
+      if (combo > 1) showCombo(combo, m);
+      const clear = new Set<number>(),
+        spawns: Spawn[] = [];
+      for (const g of groups) {
+        g.cells.forEach((k) => clear.add(k));
+        if (g.maxRun >= 4 || g.cells.length >= 5) {
+          const at = origin != null && g.cells.includes(origin) ? origin : g.longest[Math.floor(g.longest.length / 2)];
+          spawns.push([at, g.maxRun >= 5 || g.cells.length >= 5 ? 'd20a' : 'd20', g.t]);
+        }
+      }
+      for (const k of [...clear]) {
+        const [r, c] = rc(k);
+        for (const [dr, dc] of [
+          [0, 1],
+          [0, -1],
+          [1, 0],
+          [-1, 0],
+        ])
+          if (type(r + dr, c + dc) === 'skull') clear.add(key(r + dr, c + dc));
+      }
+      const inGroups = new Set(groups.flatMap((g) => g.cells));
+      await strikeGroups(
+        groups,
+        [...clear].filter((k) => !inGroups.has(k)),
+        m,
+        combo,
+        spawns,
+      );
+      await wait(80);
+      await collapse();
+      origin = null;
+      await flushBanners();
+      if (checkEnd()) return;
+    }
+  }
+
+  /* ---------- enemy turn ---------- */
+  async function enemyTurn() {
+    for (const k of ZONES) {
+      const f = S.foes[k];
+      if (f.alive && f.burn > 0) {
+        hit(k, N.burnPerStack * f.burn, 'burn');
+        f.burn--;
+        render();
+        await wait(260);
+        if (checkEnd()) return;
+      }
+    }
+    await flushBanners();
+    for (const k of ZONES) {
+      const f = S.foes[k];
+      if (!f.alive || S.over) continue;
+      f.cd--;
+      render();
+      if (f.cd <= 0) {
+        await act(k);
+        f.cd = f.every;
+        render();
+        if (checkEnd()) return;
+      }
+    }
+  }
+  async function act(k: Zone) {
+    const V = S.foes.vexa;
+    const vexaHex = k === 'vexa' && !WARDS && V.next === 'hex';
+    if (k === 'vexa' && !WARDS) V.next = vexaHex ? 'lash' : 'hex';
+    if (k === 'right' || vexaHex) {
+      const n = vexaHex ? (V.enraged ? N.foes.vexa.rageCurse : N.foes.vexa.curse) : N.foes.right.curse;
+      banner(vexaHex ? 'Hex' : esc(N.foes.right.name), `Curses ${n === 3 ? 'three' : n === 4 ? 'four' : n} runes`);
+      const stone = vexaHex ? pods.vexa : pods.right.querySelector<HTMLElement>('.er-stone')!;
+      if (vexaHex) {
+        gsap.fromTo(boss, { scale: 1 }, { scale: 1.05, duration: 0.2, yoyo: true, repeat: 1 });
+        gsap.fromTo(bossFlash, { opacity: 0.4 }, { opacity: 0, duration: 0.5 });
+      } else gsap.fromTo(stone, { scale: 1 }, { scale: 1.25, duration: 0.2, yoyo: true, repeat: 1 });
+      const pool: number[] = [];
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (isRune(type(r, c))) pool.push(key(r, c));
+      const picks: number[] = [];
+      for (let i = 0; i < n && pool.length; i++) picks.push(pool.splice(rand(pool.length), 1)[0]);
+      const [sx, sy] = appXY(stone);
+      tone(180, 0.5, 'sawtooth', 0.06, 0.5);
+      await Promise.all(
+        picks.map((k2, i) => {
+          const [r, c] = rc(k2),
+            [x, y] = cellXY(r, c);
+          const p = document.createElement('img');
+          p.className = 'er-proj';
+          p.src = IMG.skull;
+          fx.appendChild(p);
+          gsap.set(p, { x: sx, y: sy, scale: 0.4 });
+          return tw(p, { x, y, scale: 1, duration: 0.45, delay: i * 0.08, ease: 'power2.inOut' }).then(() => {
+            p.remove();
+            tile(r, c).el.remove();
+            grid[r][c] = makeTile('skull', r, c);
+            gsap.from(tile(r, c).el, { scale: 1.6, opacity: 0, duration: 0.25 });
+          });
+        }),
+      );
+      await wait(350);
+      return;
+    }
+    const dmg = k === 'left' ? N.foes.left.dmg : V.enraged ? N.foes.vexa.rageDmg : N.foes.vexa.dmg;
+    if (k === 'left') {
+      const stone = pods.left.querySelector('.er-stone')!;
+      await tw(stone, { y: 24, scale: 1.2, duration: 0.15, ease: 'power2.in' });
+      gsap.to(stone, { y: 0, scale: 1, duration: 0.3 });
+    } else {
+      banner(V.enraged ? 'Soul Rend' : 'Soul Lash');
+      await tw(boss, { scale: 1.08, duration: 0.25, ease: 'power2.in' });
+      gsap.to(boss, { scale: 1, duration: 0.4 });
+    }
+    hurt(dmg);
+    await wait(450);
+  }
+  function hurt(n: number) {
+    const absorbed = Math.min(S.armor, n);
+    S.armor -= absorbed;
+    const real = n - absorbed;
+    S.hp = Math.max(0, S.hp - real);
+    const [x, y] = appXY(heroBar);
+    float('−' + real, 'hurt', x, y - 18);
+    if (absorbed) float(absorbed + ' blocked', 'armor', x + 60, y - 30);
+    gsap.fromTo(redFlash, { opacity: real ? 1 : 0.3 }, { opacity: 0, duration: 0.5 });
+    if (!reduce) gsap.fromTo(app, { x: -8 }, { x: 0, duration: 0.4, ease: 'elastic.out(1,.25)' });
+    thud(0.35);
+    render();
+  }
+
+  /* ---------- player actions ---------- */
+  async function playSwap(a: number, b: number) {
+    if (S.busy || S.over) return;
+    S.busy = true;
+    setSel(null);
+    const [r1, c1] = rc(a),
+      [r2, c2] = rc(b),
+      A = tile(r1, c1),
+      B = tile(r2, c2);
+    if (isDie(A.type) || isDie(B.type)) {
+      S.busy = false;
+      const [dr, dc] = isDie(A.type) ? [r1, c1] : [r2, c2];
+      return rollDie(dr, dc);
+    }
+    tone(330, 0.05, 'sine', 0.05);
+    swapData(a, b);
+    await Promise.all([
+      tw(A.el, { x: c2 * s, y: r2 * s, duration: 0.16 }),
+      tw(B.el, { x: c1 * s, y: r1 * s, duration: 0.16 }),
+    ]);
+    if (!findGroups().length) {
+      swapData(a, b);
+      tone(140, 0.12, 'square', 0.05);
+      await Promise.all([
+        tw(A.el, { x: c1 * s, y: r1 * s, duration: 0.16 }),
+        tw(B.el, { x: c2 * s, y: r2 * s, duration: 0.16 }),
+      ]);
+      S.busy = false;
+      return;
+    }
+    S.moves++;
+    hideHint();
+    await resolve(b);
+    await afterMove(true);
+  }
+  async function afterMove(enemy: boolean) {
+    if (!S.over && enemy) await enemyTurn();
+    if (!S.over && !hasMoves()) await reshuffle();
+    render();
+    S.busy = false;
+    checkEnd();
+  }
+  // the d20: flick it at a target (or tap to throw at the foe above it); d20 + party bonus against a DC
+  function throwDieEl(t: Die, rune: Rune, x: number, y: number) {
+    const el = document.createElement('div'),
+      z = s * 1.05;
+    el.className = 'er-tdie';
+    el.style.width = el.style.height = z + 'px';
+    el.innerHTML = dieHTML(t, rune, z);
+    fx.appendChild(el);
+    gsap.set(el, { x, y, xPercent: -50, yPercent: -50 });
+    return el;
+  }
+  async function flyDie(el: HTMLElement, rune: Rune, x0: number, y0: number, x1: number, y1: number, i: number) {
+    const cx = (x0 + x1) / 2 + (i ? 30 : -30),
+      cy = Math.min(y0, y1) - 130 - i * 20,
+      prog = { t: 0 },
+      dn = el.querySelector('.er-dn')!,
+      C = COL[rune] || FIRE;
+    let last = 0;
+    await tw(prog, {
+      t: 1,
+      duration: 0.72,
+      delay: i * 0.08,
+      ease: 'power1.inOut',
+      onUpdate: () => {
+        const t = prog.t,
+          u = 1 - t;
+        gsap.set(el, {
+          x: u * u * x0 + 2 * u * t * cx + t * t * x1,
+          y: u * u * y0 + 2 * u * t * cy + t * t * y1,
+          rotation: t * 1080,
+          scale: 1 + 0.55 * Math.sin(Math.PI * t),
+        });
+        const now = performance.now();
+        if (now - last > 55) {
+          last = now;
+          dn.textContent = String(1 + rnd(20));
+          tone(600 + rnd(400), 0.02, 'square', 0.02);
+        }
+        emit({
+          x: num(gsap.getProperty(el, 'x')),
+          y: num(gsap.getProperty(el, 'y')),
+          vx: Math.random() - 0.5,
+          vy: Math.random() - 0.5,
+          drag: 0.9,
+          decay: 0.05,
+          size: 3 + Math.random() * 3,
+          col: C[rnd(C.length)],
+        });
+      },
+    });
+    thud(0.25);
+    ring(x1, y1, 'rgba(255,220,160,1)', 2.5, 10);
+    await tw(el, {
+      keyframes: [
+        { y: y1 - 26, scaleY: 1.05, duration: 0.14, ease: 'power2.out' },
+        { y: y1, scaleY: 0.85, scaleX: 1.12, duration: 0.12, ease: 'power2.in' },
+        { scaleY: 1, scaleX: 1, duration: 0.3, ease: 'elastic.out(1,.4)' },
+      ],
+    });
+  }
+  function dieEffect(rune: Rune, tier: DieTier, roll: number, target: Zone) {
+    if (tier === 'fumble') {
+      hurt(N.dieFumble);
+      const pool: number[] = [];
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (isRune(type(r, c))) pool.push(key(r, c));
+      for (let i = 0; i < 2 && pool.length; i++) {
+        const [r, c] = rc(pool.splice(rand(pool.length), 1)[0]);
+        tile(r, c).el.remove();
+        grid[r][c] = makeTile('skull', r, c);
+        gsap.from(tile(r, c).el, { scale: 1.6, opacity: 0, duration: 0.3 });
+      }
+      return 'The die cracks: the party takes ' + N.dieFumble + ' and two runes turn to skulls';
+    }
+    const dmg = tier === 'fail' ? roll * 2 : tier === 'success' ? roll * N.dieMult : N.dieCrit;
+    hit(target, dmg, tier === 'crit' ? 'crit' : 'dmg');
+    if (tier === 'fail') return 'A glancing hit, no rune power';
+    const crit = tier === 'crit',
+      f = liveFoe(target);
+    if (rune === 'blade') {
+      const extra = crit ? 2 : 1;
+      for (let i = 0; i < extra; i++)
+        later(
+          () => {
+            if (!S.over) {
+              hit(target, roll * 2, 'dmg');
+              render();
+              checkEnd();
+            }
+          },
+          220 * (i + 1),
+        );
+      return crit ? 'Steel die: two more strikes, and the row breaks' : 'Steel die: a second strike';
+    }
+    if (rune === 'ember') {
+      if (f.alive) f.burn += crit ? 4 : 2;
+      embersOn(target, crit ? 30 : 16);
+      return `Fire die: ${crit ? 4 : 2} burn` + (crit ? ', and the row breaks' : '');
+    }
+    if (rune === 'ruby') {
+      HEROES.forEach((h) => (S.charge[h.id] = crit ? 100 : Math.min(100, S.charge[h.id] + 25)));
+      return crit
+        ? 'Ruby die: the whole party is charged, and the row breaks'
+        : 'Ruby die: +25% charge to the whole party';
+    }
+    if (rune === 'ward') {
+      const add = crit ? 20 : 12;
+      S.armor = Math.min(N.armorCap + N.wallArmor, S.armor + add);
+      if (crit) for (const k of ZONES) if (S.foes[k].alive) S.foes[k].cd += 1;
+      return `Shield die: +${add} armor` + (crit ? ', every foe waits a turn, and the row breaks' : '');
+    }
+    const h = crit ? 50 : 20;
+    S.hp = Math.min(S.maxHp, S.hp + h);
+    if (crit)
+      for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS; c++)
+          if (type(r, c) === 'skull') {
+            tile(r, c).el.remove();
+            grid[r][c] = makeTile('vial', r, c);
+          }
+    return `Vial die: heals ${h}` + (crit ? ', skulls bloom, and the row breaks' : '');
+  }
+  async function rollDie(r: number, c: number, target?: Zone) {
+    if (S.busy || S.over) return;
+    S.busy = true;
+    setSel(null);
+    S.moves++;
+    hideHint();
+    const t = tile(r, c),
+      dieType = t.type as Die,
+      adv = dieType === 'd20a',
+      rune = t.rune || 'ruby';
+    let tgt: Zone = target || zone(c);
+    if (!S.foes[tgt].alive) tgt = 'vexa';
+    // decided before the die leaves the board
+    const d = rollD20(rng, { advantage: adv, bonus: N.dieBonus, dc: N.dieDC });
+    const a = d.a,
+      b = d.b ?? d.a,
+      roll = d.roll,
+      tot = d.total,
+      tier = d.tier;
+    const [x0, y0] = cellXY(r, c);
+    let [x1, y1] = foeXY(tgt);
+    if (!WARDS) x1 = Math.max(60, Math.min(app.clientWidth - 60, x0 * 0.5 + app.clientWidth * 0.25));
+    y1 += 12;
+    t.el.remove();
+    grid[r][c] = null;
+    const vals = adv ? [a, b] : [a],
+      els = vals.map(() => throwDieEl(dieType, rune, x0, y0));
+    tone(240, 0.5, 'sawtooth', 0.05, 3);
+    await Promise.all(els.map((el, i) => flyDie(el, rune, x0, y0, x1 + (adv ? (i ? 34 : -34) : 0), y1, i)));
+    els.forEach((el, i) => (el.querySelector('.er-dn')!.textContent = String(vals[i])));
+    if (adv) {
+      const lo = a >= b ? 1 : 0;
+      gsap.to(els[lo], { opacity: 0.25, scale: 0.7, duration: 0.3, delay: 0.25 });
+    }
+    const keep = els[adv && b > a ? 1 : 0];
+    gsap.fromTo(keep, { scale: 1.45 }, { scale: 1.15, duration: 0.35, ease: 'back.out(3)' });
+    if (tier === 'crit') {
+      tone(660, 0.5, 'triangle', 0.15, 2);
+      tone(990, 0.6, 'triangle', 0.1, 1.5);
+    } else if (tier === 'fumble') tone(200, 0.5, 'sawtooth', 0.1, 0.4);
+    else if (tier === 'success') tone(660, 0.25, 'triangle', 0.1, 1.3);
+    else tone(300, 0.2, 'triangle', 0.08);
+    await wait(adv ? 520 : 380);
+    const kx = num(gsap.getProperty(keep, 'x')),
+      ky = num(gsap.getProperty(keep, 'y'));
+    const text = dieEffect(rune, tier, roll, tgt);
+    banner(
+      TIER[tier],
+      `${adv ? `Advantage ${a} and ${b}, keep ${roll}` : roll} + ${N.dieBonus} party = ${tot} vs DC ${N.dieDC} · ${text}`,
+    );
+    if (tier === 'crit') {
+      burst(kx, ky, true);
+      gsap.fromTo(bossFlash, { opacity: 1 }, { opacity: 0, duration: 0.5 });
+      if (!reduce) gsap.fromTo(app, { y: -12 }, { y: 0, duration: 0.5, ease: 'elastic.out(1,.25)' });
+    } else if (tier === 'fumble') {
+      sparks(kx, ky, 20);
+      gsap.to(keep, { rotation: '+=25', duration: 0.1, yoyo: true, repeat: 3 });
+    } else impactFx(rune, kx, ky, tier === 'success' ? 2.5 : 1);
+    render();
+    await wait(700);
+    els.forEach((el) => gsap.to(el, { opacity: 0, scale: 0.4, duration: 0.3, onComplete: () => el.remove() }));
+    if (tier === 'crit') {
+      const row: number[] = [];
+      for (let cc = 0; cc < COLS; cc++) if (isRune(type(r, cc))) row.push(key(r, cc));
+      await strike(row, 1);
+      removeCells(row);
+    }
+    await wait(500);
+    await flushBanners();
+    await collapse();
+    if (!checkEnd()) await resolve(null);
+    await afterMove(true);
+  }
+  async function power(id: HeroId) {
+    if (S.busy || S.over || S.charge[id] < 100) return;
+    S.busy = true;
+    setSel(null);
+    S.charge[id] = 0;
+    render();
+    const h = HEROES.find((x) => x.id === id)!,
+      card = $(`.er-hc[data-h=${id}]`);
+    gsap.fromTo(card, { y: 0 }, { y: -14, duration: 0.18, yoyo: true, repeat: 1, ease: 'power2.out' });
+    await cutIn(h);
+    if (id === 'kael') {
+      const cells: number[] = [];
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (type(r, c) === 'blade') cells.push(key(r, c));
+      await battleFocus(cells);
+      await flushBanners();
+      await wait(120);
+      await collapse();
+    } else if (id === 'garran') await shieldWall(card);
+    else if (id === 'mara') await fireVolley(card);
+    else await mendingHerbs(card);
+    if (!checkEnd()) await resolve(null);
+    await afterMove(false);
+  }
+
+  /* ---------- cut-in ---------- */
+  async function cutIn(h: HeroDef) {
+    const el = $('.er-cutin'),
+      band = el.querySelector('.er-band')!,
+      lines = el.querySelector('.er-lines')!,
+      img = el.querySelector<HTMLImageElement>('img.er-cut-hero')!,
+      title = el.querySelector('.er-title')!,
+      who = el.querySelector('.er-who')!,
+      flash = el.querySelector('.er-flash')!;
+    el.style.setProperty('--c1', h.c1);
+    el.style.setProperty('--c2', h.c2);
+    img.src = h.cut;
+    title.textContent = h.power;
+    who.textContent = h.name + ' · ' + h.text;
+    sweep(h.c1);
+    const tl = gsap.timeline();
+    tl.set(el, { opacity: 1 })
+      .set(flash, { opacity: 0 })
+      .fromTo(el.querySelector('.er-dim'), { opacity: 0 }, { opacity: 1, duration: 0.15 }, 0)
+      .fromTo(band, { scaleY: 0 }, { scaleY: 1, duration: 0.18, ease: 'power3.out' }, 0.05)
+      .fromTo(lines, { x: 0 }, { x: -260, duration: 1.4, ease: 'none' }, 0)
+      .fromTo(
+        img,
+        { xPercent: -260, opacity: 0 },
+        { xPercent: -55, opacity: 1, duration: 0.3, ease: 'power3.out' },
+        0.12,
+      )
+      .to(img, { xPercent: -45, duration: 0.75, ease: 'none' }, 0.42)
+      .fromTo(title, { scale: 2.2, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.25, ease: 'back.out(2)' }, 0.3)
+      .fromTo(who, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.2 }, 0.45)
+      .to(img, { xPercent: 160, opacity: 0, duration: 0.22, ease: 'power3.in' }, 1.15)
+      .to([title, who], { opacity: 0, duration: 0.15 }, 1.15)
+      .to(band, { scaleY: 0, duration: 0.18, ease: 'power3.in' }, 1.2)
+      .to(flash, { opacity: 0.5, duration: 0.05 }, 1.35)
+      .to(flash, { opacity: 0, duration: 0.2 })
+      .to(el, { opacity: 0, duration: 0.15 }, 1.4);
+    tone(220, 0.35, 'sawtooth', 0.07, 3);
+    later(() => tone(880, 0.5, 'triangle', 0.1, 1.2), 300 / (reduce ? 3 : 1));
+    await new Promise<void>((r) =>
+      tl.eventCallback('onComplete', () => {
+        if (!dead) r();
+      }),
+    );
+  }
+
+  /* ---------- particles (canvas, additive glow) ---------- */
+  const pc = $<HTMLCanvasElement>('.er-pfx'),
+    px = pc.getContext('2d')!;
+  let parts: Particle[] = [],
+    slashes: Slash[] = [],
+    walls: Wall[] = [],
+    pRun = false,
+    raf = 0;
+  const arrows: Arrow[] = [],
+    orbs: Orb[] = [];
+  const sprites: Record<string, HTMLCanvasElement> = {};
+  function sprite(col: string) {
+    if (sprites[col]) return sprites[col];
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d')!,
+      gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,1)');
+    gr.addColorStop(0.25, col);
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, 64, 64);
+    return (sprites[col] = c);
+  }
+  function sizeP() {
+    const d = Math.min(2, devicePixelRatio || 1);
+    pc.width = app.clientWidth * d;
+    pc.height = app.clientHeight * d;
+    px.setTransform(d, 0, 0, d, 0, 0);
+  }
+  function emit(p: Partial<Particle> & { x: number; y: number }) {
+    parts.push({
+      vx: 0,
+      vy: 0,
+      life: 1,
+      decay: 0.03,
+      size: 6,
+      col: 'rgba(255,140,40,1)',
+      drag: 0.96,
+      grav: 0,
+      grow: 0,
+      ...p,
+    });
+    kick();
+  }
+  function kick() {
+    if (!pRun && !dead) {
+      pRun = true;
+      raf = requestAnimationFrame(loop);
+    }
+  }
+  function loop() {
+    if (dead) return;
+    const W = app.clientWidth,
+      H = app.clientHeight;
+    px.clearRect(0, 0, W, H);
+    px.globalCompositeOperation = 'lighter';
+    for (const sl of slashes) {
+      // crescent slash: thick white core inside a cold glow
+      const e = Math.min(1, sl.t),
+        ex = sl.x0 + (sl.x1 - sl.x0) * e,
+        ey = sl.y0 + (sl.y1 - sl.y0) * e,
+        mx = (sl.x0 + ex) / 2 + sl.bow * (ey - sl.y0) * 0.25,
+        my = (sl.y0 + ey) / 2 - sl.bow * (ex - sl.x0) * 0.25;
+      px.globalAlpha = Math.max(0, sl.life);
+      px.lineCap = 'round';
+      for (const [w, c] of [
+        [30, sl.glow],
+        [14, 'rgba(230,240,255,0.7)'],
+        [5, 'rgba(255,255,255,1)'],
+      ] as [number, string][]) {
+        px.strokeStyle = c;
+        px.lineWidth = w * sl.scale * (0.4 + sl.life * 0.6);
+        px.beginPath();
+        px.moveTo(sl.x0, sl.y0);
+        px.quadraticCurveTo(mx, my, ex, ey);
+        px.stroke();
+      }
+      if (sl.t >= 1) sl.life -= sl.scale < 1 ? 0.09 : 0.045;
+    }
+    px.globalAlpha = 1;
+    slashes = slashes.filter((sl) => sl.life > 0);
+    for (const w of walls) {
+      // Garran's barrier: two rows of glowing hexes growing out from the middle
+      const r = 12,
+        dx = r * 1.75,
+        now = performance.now() / 1000;
+      if (w.fade) w.life -= 0.035;
+      for (let row = 0; row < 2; row++)
+        for (let x = (row ? dx / 2 : 0) - dx; x < W + dx; x += dx) {
+          if (Math.abs(x - W / 2) > w.t * (W / 2 + dx)) continue;
+          const y = w.y - row * r * 1.5,
+            a = Math.max(0, w.life) * (0.55 + 0.35 * Math.sin(now * 6 + x * 0.05));
+          px.beginPath();
+          for (let i = 0; i < 6; i++) {
+            const an = Math.PI / 6 + (i * Math.PI) / 3;
+            px.lineTo(x + Math.cos(an) * r, y + Math.sin(an) * r);
+          }
+          px.closePath();
+          px.fillStyle = `rgba(80,150,255,${a * 0.25})`;
+          px.fill();
+          px.strokeStyle = `rgba(170,215,255,${a})`;
+          px.lineWidth = 1.6;
+          px.stroke();
+        }
+    }
+    walls = walls.filter((w) => w.life > 0);
+    for (const ob of orbs) {
+      // a ball of light: coloured glow, white core, a slow pulse
+      if (ob.r <= 0) continue;
+      const pulse = 1 + 0.12 * Math.sin(performance.now() / 70 + ob.seed);
+      px.globalAlpha = 0.9;
+      const g = ob.r * 4.2 * pulse;
+      px.drawImage(sprite(ob.col), ob.x - g / 2, ob.y - g / 2, g, g);
+      px.globalAlpha = 1;
+      const c = ob.r * 1.7 * pulse;
+      px.drawImage(sprite('rgba(255,255,255,1)'), ob.x - c / 2, ob.y - c / 2, c, c);
+    }
+    for (const a of arrows) {
+      const tr = a.trail;
+      if (tr.length < 2) continue;
+      for (let i = 1; i < tr.length; i++) {
+        const f = i / tr.length;
+        px.strokeStyle = `rgba(255,${(150 + 90 * f) | 0},${(60 + 120 * f) | 0},${f})`;
+        px.lineWidth = 2 + 8 * f;
+        px.lineCap = 'round';
+        px.beginPath();
+        px.moveTo(tr[i - 1][0], tr[i - 1][1]);
+        px.lineTo(tr[i][0], tr[i][1]);
+        px.stroke();
+      }
+      const [hx, hy] = tr[tr.length - 1];
+      const z = a.big ? 48 : 34;
+      px.globalAlpha = 1;
+      px.drawImage(sprite('rgba(255,200,90,1)'), hx - z / 2, hy - z / 2, z, z);
+    }
+    for (const p of parts) {
+      p.vx *= p.drag;
+      p.vy = p.vy * p.drag + p.grav;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= p.decay;
+      p.size += p.grow;
+      if (p.life <= 0) continue;
+      px.globalAlpha = Math.min(1, p.life * 1.4);
+      if (p.ring) {
+        px.strokeStyle = p.col;
+        px.lineWidth = 3 * p.life;
+        px.beginPath();
+        px.arc(p.x, p.y, p.size, 0, 6.283);
+        px.stroke();
+      } else {
+        const z = p.size * (0.5 + p.life * 0.5) * 2;
+        px.drawImage(sprite(p.col), p.x - z / 2, p.y - z / 2, z, z);
+      }
+    }
+    px.globalAlpha = 1;
+    parts = parts.filter((p) => p.life > 0);
+    if (parts.length || arrows.length || slashes.length || walls.length || orbs.length)
+      raf = requestAnimationFrame(loop);
+    else {
+      pRun = false;
+      px.clearRect(0, 0, W, H);
+    }
+  }
+  function burst(x: number, y: number, big: boolean) {
+    const n = big ? 70 : 36;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * 6.283,
+        v = 1.5 + Math.random() * (big ? 9 : 6);
+      emit({
+        x,
+        y,
+        vx: Math.cos(a) * v,
+        vy: Math.sin(a) * v - 1.5,
+        grav: 0.14,
+        drag: 0.93,
+        decay: 0.018 + Math.random() * 0.03,
+        size: 2 + Math.random() * 4,
+        col: FIRE[i % 4],
+      });
+    }
+    for (let i = 0; i < (big ? 14 : 7); i++)
+      emit({
+        x: x + Math.random() * 30 - 15,
+        y: y + Math.random() * 20 - 10,
+        vx: Math.random() * 2 - 1,
+        vy: -0.6 - Math.random() * 1.2,
+        drag: 0.98,
+        decay: 0.012,
+        size: 10 + Math.random() * 14,
+        grow: 0.2,
+        col: 'rgba(255,90,20,1)',
+      });
+    emit({ x, y, ring: true, size: 6, grow: big ? 5 : 3.2, decay: 0.05, col: 'rgba(255,210,140,1)' });
+    emit({ x, y, size: big ? 60 : 38, decay: 0.08, col: 'rgba(255,240,200,1)' });
+  }
+  const hexA = (h: string) => {
+    const n = parseInt(h.slice(1), 16);
+    return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},1)`;
+  };
+  function sweep(col: string) {
+    // rising ember wash behind a cut-in
+    const W = app.clientWidth,
+      H = app.clientHeight;
+    for (let i = 0; i < 40; i++)
+      emit({
+        x: Math.random() * W,
+        y: H * (0.3 + Math.random() * 0.4),
+        vx: 3 + Math.random() * 5,
+        vy: -0.5 - Math.random(),
+        drag: 0.99,
+        decay: 0.012 + Math.random() * 0.01,
+        size: 2 + Math.random() * 3,
+        col: col.startsWith('#') ? hexA(col) : col,
+      });
+  }
+  function embersOn(k: Zone, n: number) {
+    // lingering burn on the foe
+    const [x, y] = foeXY(k);
+    for (let i = 0; i < n; i++)
+      later(
+        () =>
+          emit({
+            x: x + Math.random() * 60 - 30,
+            y: y + Math.random() * 30,
+            vx: Math.random() - 0.5,
+            vy: -1 - Math.random() * 1.5,
+            drag: 0.98,
+            decay: 0.02,
+            size: 3 + Math.random() * 4,
+            col: FIRE[i % 4],
+          }),
+        i * 40,
+      );
+  }
+  function sparks(x: number, y: number, n: number) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * 6.283,
+        v = 2 + Math.random() * 7;
+      emit({
+        x,
+        y,
+        vx: Math.cos(a) * v,
+        vy: Math.sin(a) * v,
+        grav: 0.12,
+        drag: 0.92,
+        decay: 0.03 + Math.random() * 0.03,
+        size: 1.5 + Math.random() * 2.5,
+        col: STEEL[i % 3],
+      });
+    }
+  }
+  function slash(
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    bow: number,
+    dur: number,
+    scale = 1,
+    glow = 'rgba(120,170,255,0.35)',
+    quiet = false,
+  ) {
+    const sl: Slash = { x0, y0, x1, y1, bow, t: 0, life: 1, scale, glow };
+    slashes.push(sl);
+    kick();
+    if (!quiet) tone(1800, 0.18, 'sawtooth', 0.05, 0.2);
+    return tw(sl, { t: 1, duration: dur, ease: 'power3.out' });
+  }
+  async function battleFocus(cells: number[]) {
+    // 1. Kael's focus: steel light lifts off every blade rune
+    cells.forEach((k, i) => {
+      const [r, c] = rc(k),
+        [x, y] = cellXY(r, c);
+      gsap.to(tile(r, c).el, { scale: 1.3, duration: 0.2, delay: i * 0.02, ease: 'back.out(3)' });
+      for (let j = 0; j < 8; j++)
+        later(
+          () =>
+            emit({
+              x: x + Math.random() * s - s / 2,
+              y: y + s * 0.3,
+              vx: 0,
+              vy: -1.5 - Math.random() * 2,
+              drag: 0.97,
+              decay: 0.03,
+              size: 2 + Math.random() * 3,
+              col: STEEL[j % 3],
+            }),
+          j * 45,
+        );
+    });
+    tone(160, 0.6, 'sawtooth', 0.06, 4);
+    await wait(520);
+    // 2. the blades spin up at their targets; 3. a giant crossing slash, flash and shower of sparks
+    await strike(cells, N.focusMult, {
+      steel: true,
+      finale: async (zones) => {
+        const W = app.clientWidth,
+          st = stage.getBoundingClientRect(),
+          a = app.getBoundingClientRect(),
+          top = st.top - a.top,
+          h = st.height;
+        if (!reduce) gsap.to(app, { x: 6, duration: 0.05, yoyo: true, repeat: 3 });
+        const one = slash(W * 0.08, top + h * 0.18, W * 0.92, top + h * 0.82, 1, 0.16);
+        await wait(110);
+        const two = slash(W * 0.92, top + h * 0.18, W * 0.08, top + h * 0.82, -1, 0.16);
+        await Promise.all([one, two]);
+        gsap.fromTo(bossFlash, { opacity: 1 }, { opacity: 0, duration: 0.45 });
+        thud(0.5);
+        sparks(W / 2, top + h / 2, 60);
+        for (const z of zones) {
+          const [x, y] = foeXY(z);
+          sparks(x, y, 30);
+        }
+        if (!reduce) gsap.fromTo(app, { y: -12 }, { y: 0, duration: 0.5, ease: 'elastic.out(1,.25)' });
+        await wait(120);
+      },
+    });
+    removeCells(cells);
+  }
+  function ring(x: number, y: number, col: string, grow = 3, size = 6) {
+    emit({ x, y, ring: true, size, grow, decay: 0.05, col });
+  }
+  // every rune breaks its own way; k scales with the combo
+  function breakFx(t: Rune | 'skull', x: number, y: number, k: number) {
+    const C = COL[t],
+      n = Math.round(10 * k);
+    if (t === 'blade') {
+      const d = s * 0.38;
+      slash(x - d, y - d, x + d, y + d, 0, 0.08, 0.2, 'rgba(150,190,255,0.35)', true);
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * 6.283,
+          v = 2 + Math.random() * 4;
+        emit({
+          x,
+          y,
+          vx: Math.cos(a) * v,
+          vy: Math.sin(a) * v,
+          drag: 0.9,
+          decay: 0.05,
+          size: 1.5 + Math.random() * 2,
+          col: C[i % 3],
+        });
+      }
+    } else if (t === 'ember') {
+      for (let i = 0; i < n + 4; i++) {
+        const a = Math.random() * 6.283,
+          v = 1 + Math.random() * 3.5;
+        emit({
+          x,
+          y,
+          vx: Math.cos(a) * v,
+          vy: Math.sin(a) * v - 1.5,
+          grav: -0.05,
+          drag: 0.93,
+          decay: 0.035,
+          size: 3 + Math.random() * 5,
+          col: C[i % 4],
+        });
+      }
+    } else if (t === 'ruby') {
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * 6.283,
+          v = 2.5 + Math.random() * 4;
+        emit({
+          x,
+          y,
+          vx: Math.cos(a) * v,
+          vy: Math.sin(a) * v - 2,
+          grav: 0.25,
+          drag: 0.95,
+          decay: 0.03,
+          size: 2 + Math.random() * 2.5,
+          col: C[i % 3],
+        });
+      }
+      emit({ x, y, size: s * 0.3, decay: 0.12, col: 'rgba(255,120,140,1)' });
+    } else if (t === 'ward') {
+      ring(x, y, 'rgba(170,215,255,1)', 2.4, s * 0.25);
+      for (let i = 0; i < n / 2; i++) {
+        const a = (i / (n / 2)) * 6.283;
+        emit({ x, y, vx: Math.cos(a) * 3, vy: Math.sin(a) * 3, drag: 0.9, decay: 0.05, size: 2.5, col: C[i % 3] });
+      }
+    } else if (t === 'vial') {
+      for (let i = 0; i < n; i++) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.4,
+          v = 2 + Math.random() * 4;
+        emit({
+          x,
+          y,
+          vx: Math.cos(a) * v,
+          vy: Math.sin(a) * v,
+          grav: 0.3,
+          drag: 0.97,
+          decay: 0.03,
+          size: 2 + Math.random() * 3,
+          col: C[i % 3],
+        });
+      }
+    } else {
+      for (let i = 0; i < 12; i++)
+        emit({
+          x: x + Math.random() * 20 - 10,
+          y: y + Math.random() * 20 - 10,
+          vx: Math.random() * 2 - 1,
+          vy: -0.5 - Math.random(),
+          drag: 0.97,
+          decay: 0.025,
+          size: 8 + Math.random() * 10,
+          grow: 0.3,
+          col: C[i % 3],
+        });
+    }
+  }
+  function impactFx(t: Rune | 'skull', x: number, y: number, k: number) {
+    const C = COL[t] || FIRE;
+    for (let i = 0; i < Math.round(8 * k); i++) {
+      const a = Math.random() * 6.283,
+        v = 2 + Math.random() * 5;
+      emit({
+        x,
+        y,
+        vx: Math.cos(a) * v,
+        vy: Math.sin(a) * v,
+        grav: 0.1,
+        drag: 0.92,
+        decay: 0.04,
+        size: 2 + Math.random() * 3,
+        col: C[i % C.length],
+      });
+    }
+  }
+  function runLine(g: Group) {
+    // a light line runs along the matched row before it breaks
+    const cells = g.longest,
+      [r0, c0] = rc(cells[0]),
+      [r1, c1] = rc(cells[cells.length - 1]),
+      [x0, y0] = cellXY(r0, c0),
+      [x1, y1] = cellXY(r1, c1);
+    const glow = {
+      blade: 'rgba(150,190,255,0.5)',
+      ember: 'rgba(255,120,40,0.55)',
+      ruby: 'rgba(255,50,80,0.55)',
+      ward: 'rgba(120,180,255,0.5)',
+      vial: 'rgba(90,230,110,0.5)',
+    }[g.t];
+    void slash(x0, y0, x1, y1, 0, 0.1, 0.3, glow, true);
+  }
+  // 4 and 5 matches: the d20 forms where the runes met
+  function forgeFx(r: number, c: number, gold: boolean) {
+    const [x, y] = cellXY(r, c),
+      C = gold
+        ? ['rgba(255,220,120,1)', 'rgba(255,255,220,1)', 'rgba(255,170,60,1)']
+        : ['rgba(255,70,90,1)', 'rgba(255,200,120,1)', 'rgba(220,30,60,1)'];
+    ring(x, y, C[1], gold ? 6 : 4, s * 0.3);
+    ring(x, y, C[0], gold ? 4 : 2.5, s * 0.15);
+    for (let i = 0; i < (gold ? 70 : 36); i++) {
+      const a = Math.random() * 6.283,
+        v = 2 + Math.random() * (gold ? 8 : 5);
+      emit({
+        x,
+        y,
+        vx: Math.cos(a) * v,
+        vy: Math.sin(a) * v,
+        grav: 0.08,
+        drag: 0.93,
+        decay: 0.025,
+        size: 2 + Math.random() * 3,
+        col: C[i % 3],
+      });
+    }
+    if (gold) {
+      // a pillar of light and a flash for the golden die
+      const top = stage.getBoundingClientRect().top - app.getBoundingClientRect().top;
+      void slash(x, y, x, top, 0, 0.18, 0.9, 'rgba(255,200,90,0.5)', true);
+      gsap.fromTo(bossFlash, { opacity: 0.6 }, { opacity: 0, duration: 0.5 });
+      if (!reduce) gsap.fromTo(app, { y: -6 }, { y: 0, duration: 0.45, ease: 'elastic.out(1,.3)' });
+    }
+    float(
+      gold ? 'Golden d20' : 'd20 forged',
+      gold ? 'crit' : 'armor',
+      Math.min(Math.max(x, 130), app.clientWidth - 130),
+      y - s * 0.6,
+    );
+    if (gold) {
+      tone(523, 0.3, 'triangle', 0.12);
+      later(() => tone(784, 0.3, 'triangle', 0.12), 120);
+      later(() => tone(1047, 0.5, 'triangle', 0.12), 240);
+    } else tone(660, 0.3, 'triangle', 0.1, 1.5);
+  }
+
+  async function shieldWall(card: HTMLElement) {
+    const [cx, cy] = appXY(card),
+      a = app.getBoundingClientRect(),
+      W = app.clientWidth,
+      wy = heroBox.getBoundingClientRect().top - a.top + 16,
+      BL = COL.ward;
+    ring(cx, cy, 'rgba(170,215,255,1)', 4, 20);
+    for (let i = 0; i < 30; i++) {
+      const an = Math.random() * 6.283,
+        v = 2 + Math.random() * 4;
+      emit({
+        x: cx,
+        y: cy,
+        vx: Math.cos(an) * v,
+        vy: Math.sin(an) * v - 2,
+        drag: 0.92,
+        decay: 0.03,
+        size: 2 + Math.random() * 3,
+        col: BL[i % 3],
+      });
+    }
+    const wall: Wall = { t: 0, life: 1, y: wy };
+    walls.push(wall);
+    kick();
+    tone(180, 0.6, 'triangle', 0.12, 2.2);
+    thud(0.4);
+    if (!reduce) gsap.fromTo(app, { y: 5 }, { y: 0, duration: 0.4, ease: 'elastic.out(1,.3)' });
+    await tw(wall, { t: 1, duration: 0.4, ease: 'power2.out' });
+    S.armor = Math.min(N.armorCap + N.wallArmor, S.armor + N.wallArmor);
+    const [hx, hy] = appXY(heroBar);
+    float('+' + N.wallArmor + ' armor', 'armor', hx, hy - 16);
+    render();
+    await wait(200);
+    const live = ZONES.filter((k) => S.foes[k].alive);
+    tone(400, 0.4, 'sine', 0.08, 2);
+    await Promise.all(
+      live.map((k, i) => {
+        const [fx2, fy2] = foeXY(k),
+          sx = W / 2 + (fx2 - W / 2) * 0.2,
+          prog = { t: 0 };
+        return tw(prog, {
+          t: 1,
+          duration: 0.42,
+          delay: i * 0.09,
+          ease: 'power2.in',
+          onUpdate: () => {
+            const x = sx + (fx2 - sx) * prog.t,
+              y = wy + (fy2 - wy) * prog.t;
+            for (let j = 0; j < 3; j++)
+              emit({
+                x: x + Math.random() * 10 - 5,
+                y,
+                vx: Math.random() - 0.5,
+                vy: 1,
+                drag: 0.9,
+                decay: 0.05,
+                size: 3 + Math.random() * 3,
+                col: BL[rnd(3)],
+              });
+          },
+        }).then(() => {
+          ring(fx2, fy2, 'rgba(170,215,255,1)', 4, 10);
+          impactFx('ward', fx2, fy2, 2);
+          S.foes[k].cd += 1;
+          render();
+          const badge = k === 'vexa' ? $('.er-vexa-cd') : pods[k].querySelector('.er-cd');
+          gsap.fromTo(badge, { scale: 1.9 }, { scale: 1, duration: 0.45, ease: 'back.out(3)' });
+          tone(620, 0.15, 'triangle', 0.08);
+        });
+      }),
+    );
+    banner('Foes stalled', 'Every foe waits one more turn');
+    await wait(900);
+    wall.fade = true;
+  }
+
+  async function mendingHerbs(card: HTMLElement) {
+    const [cx, cy] = appXY(card),
+      G = COL.vial,
+      a = app.getBoundingClientRect();
+    for (let i = 0; i < 60; i++)
+      later(() => {
+        const an = i * 0.55;
+        emit({
+          x: cx + Math.cos(an) * 26,
+          y: cy + Math.sin(an) * 10,
+          vx: Math.cos(an) * 1.8,
+          vy: -2.5 - Math.random() * 3,
+          grav: -0.02,
+          drag: 0.97,
+          decay: 0.014,
+          size: 3 + Math.random() * 4,
+          col: G[i % 3],
+        });
+      }, i * 10);
+    [523, 659, 784, 1047].forEach((f, i) => later(() => tone(f, 0.35, 'sine', 0.08), i * 90));
+    await wait(450);
+    const bar = heroBar.getBoundingClientRect(),
+      bx = bar.left - a.left,
+      by = bar.top - a.top;
+    for (let i = 0; i < 55; i++)
+      later(
+        () =>
+          emit({
+            x: bx + Math.random() * bar.width,
+            y: by - 120 - Math.random() * 80,
+            vx: 0,
+            vy: 3 + Math.random() * 2,
+            drag: 0.995,
+            decay: 0.017,
+            size: 3 + Math.random() * 3,
+            col: G[rnd(3)],
+          }),
+        i * 8,
+      );
+    await wait(550);
+    const real = Math.min(N.herbs, S.maxHp - S.hp);
+    S.hp += real;
+    float('+' + N.herbs, 'heal', bx + bar.width / 2, by - 16);
+    emit({ x: bx + bar.width / 2, y: by + 6, size: bar.width * 0.4, decay: 0.05, col: 'rgba(120,255,140,1)' });
+    gsap.fromTo(heroBar, { scaleY: 1.6 }, { scaleY: 1, duration: 0.4, ease: 'back.out(3)' });
+    render();
+    const skulls: [number, number][] = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (type(r, c) === 'skull') skulls.push([r, c]);
+    await Promise.all(
+      skulls.map(([r, c], i) =>
+        wait(i * 90).then(() => {
+          const [x, y] = cellXY(r, c);
+          breakFx('skull', x, y, 1);
+          ring(x, y, 'rgba(140,255,150,1)', 2.5, s * 0.2);
+          for (let j = 0; j < 12; j++) {
+            const an = (j / 12) * 6.283;
+            emit({
+              x,
+              y,
+              vx: Math.cos(an) * 2.5,
+              vy: Math.sin(an) * 2.5 - 1,
+              drag: 0.93,
+              decay: 0.03,
+              size: 3,
+              col: G[j % 3],
+            });
+          }
+          tile(r, c).el.remove();
+          grid[r][c] = makeTile('vial', r, c);
+          gsap.from(tile(r, c).el, { scale: 0, rotation: 90, duration: 0.4, ease: 'back.out(2)' });
+          tone(880 + i * 60, 0.12, 'sine', 0.06);
+        }),
+      ),
+    );
+    await wait(450);
+  }
+
+  async function fireVolley(card: HTMLElement) {
+    const [sx, sy] = appXY(card),
+      shots: Promise<void>[] = [];
+    // Mara draws: embers gather at her card
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * 6.283,
+        r = 50 + Math.random() * 30;
+      emit({
+        x: sx + Math.cos(a) * r,
+        y: sy + Math.sin(a) * r,
+        vx: (-Math.cos(a) * r) / 14,
+        vy: (-Math.sin(a) * r) / 14,
+        drag: 0.9,
+        decay: 0.04,
+        size: 3 + Math.random() * 3,
+        col: FIRE[i % 4],
+      });
+    }
+    tone(300, 0.4, 'sawtooth', 0.05, 2.5);
+    await wait(380);
+    for (let i = 0; i < N.volley; i++) {
+      const live = ZONES.filter((k) => S.foes[k].alive);
+      if (!live.length || S.over) break;
+      const k = live[rand(live.length)],
+        [tx, ty] = foeXY(k),
+        big = i === N.volley - 1;
+      const a: Arrow = {
+        t: 0,
+        big,
+        trail: [],
+        x0: sx + (Math.random() * 30 - 15),
+        y0: sy - 24,
+        cx: (sx + tx) / 2 + (Math.random() * 180 - 90),
+        cy: Math.min(sy, ty) - 90 - Math.random() * 90,
+        x1: tx + (Math.random() * 30 - 15),
+        y1: ty + (Math.random() * 20 - 10),
+      };
+      arrows.push(a);
+      kick();
+      tone(900 + i * 60, 0.09, 'triangle', 0.07, 0.6);
+      shots.push(
+        tw(a, {
+          t: 1,
+          duration: big ? 0.6 : 0.48,
+          ease: 'power1.in',
+          onUpdate: () => {
+            const t = a.t,
+              u = 1 - t,
+              x = u * u * a.x0 + 2 * u * t * a.cx + t * t * a.x1,
+              y = u * u * a.y0 + 2 * u * t * a.cy + t * t * a.y1;
+            a.trail.push([x, y]);
+            if (a.trail.length > 18) a.trail.shift();
+            for (let j = 0; j < 2; j++)
+              emit({
+                x,
+                y,
+                vx: Math.random() - 0.5,
+                vy: Math.random() - 0.2,
+                drag: 0.94,
+                decay: 0.05,
+                size: 2 + Math.random() * 3,
+                col: FIRE[rnd(4)],
+              });
+          },
+        }).then(() => {
+          arrows.splice(arrows.indexOf(a), 1);
+          burst(a.x1, a.y1, big);
+          if (!reduce) gsap.fromTo(app, { x: big ? -10 : -4 }, { x: 0, duration: 0.3, ease: 'elastic.out(1,.3)' });
+          if (S.over) return;
+          hit(k, big ? N.volleyDmg * 2 : N.volleyDmg, big ? 'crit' : 'dmg');
+          if (S.foes[k].alive) {
+            S.foes[k].burn++;
+            embersOn(k, big ? 24 : 10);
+          }
+          render();
+          checkEnd();
+        }),
+      );
+      await wait(130);
+    }
+    await Promise.all(shots);
+    await wait(450);
+    await flushBanners();
+  }
+
+  /* ---------- input ---------- */
+  function setSel(k: number | null) {
+    if (sel != null) {
+      const [r, c] = rc(sel);
+      grid[r][c]?.el.classList.remove('er-sel');
+    }
+    sel = k;
+    if (k != null) {
+      const [r, c] = rc(k);
+      tile(r, c).el.classList.add('er-sel');
+    }
+  }
+  let down: { r: number; c: number; x: number; y: number; moved: boolean; die: boolean; aim: Zone | null } | null =
+    null;
+  board.addEventListener('pointerdown', (e) => {
+    audio();
+    if (S.busy || S.over) return;
+    const b = board.getBoundingClientRect(),
+      c = Math.floor((e.clientX - b.left) / s),
+      r = Math.floor((e.clientY - b.top) / s);
+    if (r < 0 || r >= ROWS || c < 0 || c >= COLS || !grid[r][c]) return;
+    down = { r, c, x: e.clientX, y: e.clientY, moved: false, die: isDie(tile(r, c).type), aim: null };
+    board.setPointerCapture(e.pointerId);
+  });
+  board.addEventListener('pointermove', (e) => {
+    if (down && down.die) {
+      aimAt(e);
+      return;
+    }
+    if (!down || down.moved) return;
+    const dx = e.clientX - down.x,
+      dy = e.clientY - down.y;
+    if (Math.hypot(dx, dy) < s * 0.35) return;
+    down.moved = true;
+    const [dr, dc] = Math.abs(dx) > Math.abs(dy) ? [0, Math.sign(dx)] : [Math.sign(dy), 0];
+    const r2 = down.r + dr,
+      c2 = down.c + dc;
+    if (r2 < 0 || r2 >= ROWS || c2 < 0 || c2 >= COLS) return;
+    void playSwap(key(down.r, down.c), key(r2, c2));
+  });
+  board.addEventListener('pointerup', () => {
+    if (!down) return;
+    const d = down;
+    down = null;
+    if (d.die) {
+      gsap.to(aim, { opacity: 0, duration: 0.15 });
+      render();
+      if (S.busy) return;
+      if (d.aim) void rollDie(d.r, d.c, d.aim);
+      else if (!d.moved) void rollDie(d.r, d.c);
+      return;
+    }
+    if (d.moved || S.busy) return;
+    const k = key(d.r, d.c),
+      t = type(d.r, d.c);
+    if (isDie(t)) return void rollDie(d.r, d.c);
+    if (sel == null) return setSel(k);
+    if (sel === k) return setSel(null);
+    const [r0, c0] = rc(sel);
+    if (Math.abs(r0 - d.r) + Math.abs(c0 - d.c) === 1) return void playSwap(sel, k);
+    setSel(k);
+  });
+  // dragging a die: a dotted line from the die to your finger; whichever foe it points at is the target
+  function aimAt(e: PointerEvent) {
+    if (!down) return;
+    const a = app.getBoundingClientRect(),
+      [x0, y0] = cellXY(down.r, down.c),
+      x = e.clientX - a.left,
+      y = e.clientY - a.top,
+      dx = x - x0,
+      dy = y - y0,
+      len = Math.hypot(dx, dy);
+    if (len < s * 0.5 || dy > -s * 0.3) {
+      down.aim = null;
+      down.moved = len >= s * 0.5;
+      gsap.set(aim, { opacity: 0 });
+      render();
+      return;
+    }
+    down.moved = true;
+    const st = stage.getBoundingClientRect(),
+      ux = x0 + dx * ((st.bottom - a.top - 40 - y0) / dy) || x; // where the line crosses the stage
+    let k: Zone = 'vexa';
+    if (WARDS) {
+      const lx = $('.er-lanes').getBoundingClientRect().left - a.left,
+        rel = (ux - lx) / (s * COLS);
+      k = rel < 2 / 7 ? 'left' : rel > 5 / 7 ? 'right' : 'vexa';
+      if (!S.foes[k].alive) k = 'vexa';
+    }
+    down.aim = k;
+    render();
+    pods[k].classList.add('er-locked');
+    gsap.set(aim, { x: x0, y: y0, width: len, rotation: (Math.atan2(dy, dx) * 180) / Math.PI, opacity: 0.95 });
+  }
+  function lockOn(k: Zone) {
+    audio();
+    if (S.over) return;
+    S.lock = S.lock === k ? null : k;
+    hideHint();
+    render();
+    tone(600, 0.06, 'sine', 0.06);
+  }
+  pods.left.addEventListener('click', () => lockOn('left'));
+  pods.right.addEventListener('click', () => lockOn('right'));
+  pods.vexa.addEventListener('click', () => lockOn('vexa'));
+  const party = $('.er-party');
+  party.innerHTML = HEROES.map(
+    (h) =>
+      `<button class="er-hc" data-h="${h.id}" aria-label="${esc(h.name)}: ${esc(h.power)}"><img class="er-face" src="${esc(h.face)}" alt=""><div class="er-fill"></div><span class="er-pct"></span><span class="er-hc-rune"><img src="${IMG[h.rune]}" alt=""></span><span class="er-nm">${esc(h.name)}<small>${esc(h.power)}</small></span></button>`,
+  ).join('');
+  party.querySelectorAll<HTMLElement>('.er-hc').forEach((b) =>
+    b.addEventListener('click', () => {
+      audio();
+      const id = b.dataset.h as HeroId;
+      if (S.charge[id] >= 100) void power(id);
+      else {
+        const h = HEROES.find((x) => x.id === id)!;
+        banner(esc(h.power), esc(h.text) + ` · charges from ${h.rune === 'ward' ? 'shield' : h.rune} runes`);
+      }
+    }),
+  );
+  root.querySelector('.er-charge-btn')?.addEventListener('click', () => {
+    if (S.over) return;
+    HEROES.forEach((h) => (S.charge[h.id] = 100));
+    render();
+  });
+  const muteBtn = $('.er-mute-btn');
+  muteBtn.addEventListener('click', () => {
+    muted = !muted;
+    muteBtn.style.opacity = muted ? '0.4' : '1';
+  });
+  root.querySelector('.er-restart-btn')?.addEventListener('click', () => {
+    if (!S.busy) start();
+  });
+  function hideHint() {
+    lockhint.style.opacity = '0';
+  }
+
+  /* ---------- state + render ---------- */
+  function setBar(el: Element, frac: number, text?: string) {
+    const i = el.querySelector<HTMLElement>('i')!,
+      b = el.querySelector<HTMLElement>('b');
+    i.style.transform = `scaleX(${frac})`;
+    if (b) b.style.transform = `scaleX(${frac})`;
+    const n = el.querySelector('.er-num');
+    if (n && text != null) n.textContent = text;
+  }
+  function render() {
+    const v = S.foes.vexa;
+    setBar($('.er-vexa-bar'), v.hp / v.max, `${v.hp} / ${v.max}`);
+    const w = wardsUp(),
+      warded = $('.er-warded');
+    warded.hidden = !w || !WARDS;
+    warded.textContent = `Warded −${w * 25}%`;
+    $('.er-enraged').hidden = !v.enraged;
+    const vb = $('.er-vexa-burn');
+    vb.hidden = !v.burn;
+    vb.textContent = `Burning ${v.burn}`;
+    const vcd = $('.er-vexa-cd');
+    vcd.textContent = String(v.cd);
+    vcd.classList.toggle('er-soon', v.cd <= 1);
+    $('.er-intent').textContent =
+      !WARDS && v.next === 'hex'
+        ? `Hex curses ${v.enraged ? N.foes.vexa.rageCurse : N.foes.vexa.curse} runes into skulls`
+        : `${v.enraged ? 'Soul Rend' : 'Soul Lash'} hits the party for ${v.enraged ? N.foes.vexa.rageDmg : N.foes.vexa.dmg}`;
+    for (const k of ['left', 'right'] as const) {
+      const f = S.foes[k],
+        p = pods[k];
+      setBar(p.querySelector('.er-bar')!, f.hp / f.max);
+      const cd = p.querySelector('.er-cd')!;
+      cd.textContent = String(f.cd);
+      cd.classList.toggle('er-soon', f.cd <= 1);
+      const bb = p.querySelector<HTMLElement>('.er-burnb')!;
+      bb.style.display = f.burn ? 'block' : 'none';
+      bb.textContent = '🔥' + f.burn;
+      p.classList.toggle('er-broken', !f.alive);
+      p.classList.toggle('er-locked', S.lock === k);
+    }
+    pods.vexa.classList.toggle('er-locked', S.lock === 'vexa');
+    setBar(heroBar, S.hp / S.maxHp, `${S.hp} / ${S.maxHp}`);
+    const armorEl = $('.er-armor');
+    armorEl.style.display = S.armor ? 'inline' : 'none';
+    armorEl.textContent = `◈ ${S.armor}`;
+    for (const h of HEROES) {
+      const b = $(`.er-hc[data-h=${h.id}]`),
+        cv = S.charge[h.id];
+      b.querySelector<HTMLElement>('.er-fill')!.style.transform = `scaleY(${cv / 100})`;
+      b.querySelector('.er-pct')!.textContent = cv >= 100 ? 'TAP' : cv + '%';
+      b.classList.toggle('er-ready', cv >= 100);
+    }
+  }
+  function result(won: boolean): BattleResult {
+    const v = S.foes.vexa;
+    return {
+      outcome: won ? 'win' : 'loss',
+      tier: battleTier(won, S.hp / S.maxHp, v.hp / v.max),
+      hpLeft: S.hp,
+      maxHp: S.maxHp,
+      moves: S.moves,
+      enemyHpLeft: v.hp,
+      enemyMaxHp: v.max,
+    };
+  }
+  function checkEnd() {
+    if (S.over) return true;
+    if (S.foes.vexa.hp <= 0) {
+      S.over = true;
+      later(() => endCard(true), 500);
+      return true;
+    }
+    if (S.hp <= 0) {
+      S.over = true;
+      later(() => endCard(false), 500);
+      return true;
+    }
+    return false;
+  }
+  function endCard(won: boolean) {
+    const res = result(won);
+    o.onEnd(res);
+    const tier = won ? (res.tier === 'critSuccess' ? 'Flawless victory' : 'Victory') : 'Defeat';
+    if (won) {
+      gsap.to(boss, { opacity: 0.25, filter: 'grayscale(1)', duration: 1 });
+      tone(523, 0.4);
+      later(() => tone(784, 0.6), 200);
+    }
+    // Continue goes back to the story; a must-win fight only offers another go after a loss.
+    const canContinue = o.hasContinue && (won || !o.mustWin);
+    const canRetry = !o.hasContinue || o.allowRetry || (!won && o.mustWin);
+    overlay.hidden = false;
+    overlay.innerHTML = `<div class="er-card"><h1>${won ? `${E} falls` : 'The party falls'}</h1><div class="er-tier">${tier}</div>
+    <div class="er-stats">${S.moves} moves · Party ${S.hp} / ${S.maxHp} HP${won ? '' : ` · ${E} ${S.foes.vexa.hp} HP left`}</div>
+    ${canContinue ? '<button class="er-btn er-continue-btn">Continue</button>' : ''}
+    ${canRetry ? `<button class="er-btn${canContinue ? ' er-btn-quiet' : ''} er-again-btn">${won ? 'Fight again' : 'Try again'}</button>` : ''}</div>`;
+    gsap.from(overlay.querySelector('.er-card'), { scale: 0.8, opacity: 0, duration: 0.35, ease: 'back.out(2)' });
+    overlay.querySelector<HTMLElement>('.er-again-btn')?.addEventListener('click', () => start());
+    overlay.querySelector<HTMLElement>('.er-continue-btn')?.addEventListener('click', () => o.onContinue(res));
+  }
+  async function begin() {
+    audio();
+    overlay.hidden = true;
+    S.busy = true;
+    await dealBoard();
+    S.busy = false;
+    if (WARDS) {
+      lockhint.style.opacity = '1';
+      later(hideHint, 5000);
+    }
+  }
+  function intro() {
+    overlay.hidden = false;
+    const [k, g, m, el] = HEROES.map((h) => esc(h.name));
+    const V = N.foes.vexa;
+    const alone = `${E} fights alone. Every ${V.every} turns she acts, switching between Soul Lash (a heavy hit on the party, so keep armor up) and Hex (curses runes into skulls). Enraged at half health, she acts ${V.rageEvery === 1 ? 'every turn' : `every ${V.rageEvery} turns`}. The red number is turns until she acts.`;
+    overlay.innerHTML = `<div class="er-card"><h1>${esc(o.introTitle)}</h1><p class="er-sub">${esc(o.introSub)}</p>
+    <ul>
+      <li><img src="${IMG.blade}" alt=""><span>Swipe to swap runes and line up 3 or more. Blades, embers and rubies fly up and strike whatever stands above their column.</span></li>
+      <li><img src="${IMG.vial}" alt=""><span>Vials heal the party, shields give armor that blocks her hits.</span></li>
+      <li><img class="er-face-mini" src="${esc(HEROES[2].face)}" alt=""><span>Each of the party charges from one rune: ${k} from blades, ${g} from shields, ${m} from embers, ${el} from vials. Rubies charge everyone. Tap a full portrait to use the power, for free.</span></li>
+      <li><div class="er-mini er-mini-stone">ᛉ</div><span>${WARDS ? `Two wards guard ${E}: each one standing cuts her damage taken by 25%. The number on each foe is turns until it acts.` : alone}</span></li>
+      <li><div class="er-mini">20</div><span>Match 4 to forge a d20 of that rune. Drag it up and let go to throw it at a foe (or just tap it). It rolls d20 + ${N.dieBonus} against DC ${N.dieDC}: a success adds the rune's power, a natural 20 crits and breaks its row, a 1 backfires. Match 5 for a golden die that rolls twice and keeps the best.</span></li>
+    </ul>
+    <button class="er-btn er-go-btn">Fight</button></div>`;
+    overlay.querySelector<HTMLElement>('.er-go-btn')!.addEventListener('click', () => void begin());
+  }
+  function freshFoe(f: FoeRules): Foe {
+    return { ...f, max: f.hp, cd: f.every, burn: 0, alive: true, enraged: false, next: 'lash' };
+  }
+  function start(first = false) {
+    const F = N.foes;
+    S = {
+      hp: N.heroHp,
+      maxHp: N.heroHp,
+      armor: 0,
+      charge: Object.fromEntries(HEROES.map((h) => [h.id, 0])) as Record<HeroId, number>,
+      moves: 0,
+      lock: null,
+      busy: false,
+      over: false,
+      queue: [],
+      foes: { left: freshFoe(F.left), vexa: freshFoe(F.vexa), right: freshFoe(F.right) },
+    };
+    if (!WARDS) {
+      S.foes.left.alive = S.foes.right.alive = false;
+      pods.left.hidden = pods.right.hidden = true;
+    }
+    overlay.hidden = true;
+    gsap.set(boss, { opacity: 1, filter: 'none', scale: 1 });
+    if (WARDS) {
+      pods.left.classList.remove('er-broken');
+      pods.right.classList.remove('er-broken');
+    }
+    sel = null;
+    layout();
+    buildBoard();
+    render();
+    if (!first) {
+      S.busy = true;
+      void dealBoard().then(() => {
+        S.busy = false;
+      });
+    }
+  }
+
+  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => (layout(), sizeP())) : null;
+  ro?.observe(root);
+  sizeP();
+  start(true);
+  if (o.intro) intro();
+  else void begin();
+
+  return {
+    destroy() {
+      dead = true;
+      ro?.disconnect();
+      timers.forEach((id) => clearTimeout(id));
+      timers.clear();
+      cancelAnimationFrame(raf);
+      gsap.killTweensOf(root.querySelectorAll('*'));
+      gsap.killTweensOf([...orbs, ...arrows, ...slashes, ...walls]);
+      if (reduce) gsap.globalTimeline.timeScale(prevScale);
+      void ac?.close();
+      root.innerHTML = '';
+      root.classList.remove('er-root');
+    },
+    debug: {
+      get state() {
+        return S;
+      },
+      get types() {
+        return types();
+      },
+      playSwap,
+      rollDie,
+      power,
+    },
+  };
+}
