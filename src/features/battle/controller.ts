@@ -525,12 +525,13 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       below = (87 / 969) * ROWS;
     s = Math.floor(Math.min(app.clientWidth - 8, 480) / visW);
     // the stage keeps at least 30% of the screen (170px minimum) so the enemy stays in view
-    const room = app.clientHeight - 26 - heroBox.offsetHeight - Math.max(170, app.clientHeight * 0.3);
-    if (room < s * (ROWS + below)) s = Math.max(34, Math.floor(room / (ROWS + below)));
+    const room = app.clientHeight - heroBox.offsetHeight - Math.max(170, app.clientHeight * 0.3);
+    if (room < s * (ROWS + above + below)) s = Math.max(34, Math.floor(room / (ROWS + above + below)));
     board.style.width = s * COLS + 'px';
     board.style.height = s * ROWS + 'px';
-    boardWrap.style.paddingBottom = Math.round(s * below - 4) + 'px';
-    boardWrap.style.marginTop = Math.round(Math.max(0, s * above - 26)) + 'px';
+    // the board sits low: its frame's top reaches into the stage's floor, and the party follows right under it
+    boardWrap.style.paddingBottom = Math.round(s * below - 8) + 'px';
+    boardWrap.style.marginTop = Math.round(s * above - 6) + 'px';
     const fw = (s * COLS) / FR.w;
     boardFrame.style.width = fw + 'px';
     boardFrame.style.left = board.offsetLeft - FR.left * fw + 'px';

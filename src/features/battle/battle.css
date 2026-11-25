@@ -535,7 +535,7 @@
 }
 /* combo */
 .er-combo-wrap {
-  height: 26px;
+  height: 0;
   display: grid;
   place-items: center;
   position: relative;
@@ -729,10 +729,10 @@
 }
 /* party */
 .er-hero {
-  padding: 8px max(10px, env(safe-area-inset-right, 0px)) 10px max(10px, env(safe-area-inset-left, 0px));
+  padding: 0 max(10px, env(safe-area-inset-right, 0px)) 8px max(10px, env(safe-area-inset-left, 0px));
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 5px;
 }
 .er-party-top {
   display: flex;
