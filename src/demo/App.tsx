@@ -2,7 +2,7 @@ import { RuneBattle, type Difficulty, type FigureFraming } from '../index';
 import eddaImg from './assets/edda.webp';
 import eddaHurtImg from './assets/edda-angry.webp';
 
-// The demo page: ?solo for the fight without wards, ?difficulty=easy|normal|hard|brutal, ?seed=123, ?card for the enemy
+// The demo page: the solo fight (?wards for the Ash and Hex wards), ?difficulty=easy|normal|hard|brutal, ?seed=123, ?card for the enemy
 // card, ?painting for Vexa's painting in place of the figure, ?framing=full|close (default auto).
 const q = new URLSearchParams(location.search);
 const difficulty = (q.get('difficulty') ?? 'normal') as Difficulty;
@@ -12,7 +12,7 @@ const figure = !q.has('painting');
 export function App() {
   return (
     <RuneBattle
-      wards={!q.has('solo')}
+      wards={q.has('wards')}
       difficulty={difficulty}
       seed={seed}
       {...(figure
@@ -24,7 +24,7 @@ export function App() {
             figureFraming: (q.get('framing') ?? 'auto') as FigureFraming,
           }
         : {})}
-      introSub={q.has('solo') ? 'Solo fight' : 'Combat demo'}
+      introSub={q.has('wards') ? 'Combat demo' : 'Solo fight'}
       tutorial={!q.has('card')}
       introCard={q.has('card')}
       devTools
