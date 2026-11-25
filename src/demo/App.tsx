@@ -3,7 +3,7 @@ import eddaImg from './assets/edda.webp';
 import eddaHurtImg from './assets/edda-angry.webp';
 
 // The demo page: the solo fight (?wards for the Ash and Hex wards), ?difficulty=easy|normal|hard|brutal, ?seed=123, ?card for the enemy
-// card, ?dev for the test buttons, ?painting for Vexa's painting in place of the figure, ?framing=full|close (default auto).
+// card, ?dev for the test buttons, ?painting for Vexa's painting in place of the figure, ?framing=full|auto (default close).
 const q = new URLSearchParams(location.search);
 const difficulty = (q.get('difficulty') ?? 'normal') as Difficulty;
 const seed = q.has('seed') ? Number(q.get('seed')) : undefined;
@@ -21,7 +21,7 @@ export function App() {
             enemyTitle: 'Huntress of the Pines',
             enemyFigure: eddaImg,
             enemyFigureHurt: eddaHurtImg,
-            figureFraming: (q.get('framing') ?? 'auto') as FigureFraming,
+            figureFraming: (q.get('framing') ?? 'close') as FigureFraming,
           }
         : {})}
       introSub={q.has('wards') ? 'Combat demo' : 'Solo fight'}

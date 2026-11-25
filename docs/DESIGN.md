@@ -53,8 +53,8 @@ Ayalon's Water Hag layout (`docs/reference/design/water-hag-layout.png`) with hi
 
 `enemyFigure` (a Studio full-figure cutout) puts her on the stage in place of the painting: she stands in front of
 `stageImage` (the story's scene; her painting by default), blurred and darkened, with the wards at her feet.
-- Framing: full body when the stage below the header has 140px or more, else closer (cropped at the legs);
-  `figureFraming` forces either.
+- Framing: closer by default (her upper body, as big as the stage allows; Ayalon's pick 2026-11-25); `full` shows
+  the whole figure, `auto` picks full body when the stage below the header has 140px or more.
 - She breathes (a slow idle), recoils with a red flash and her hurt mood (`enemyFigureHurt`) when hit, gathers and
   lunges when she attacks, and breathes faster in a red aura when enraged. Tapping her body aims at her.
 - The enemy card shows the figure too. The demo plays Edda; `?painting` shows Vexa's painting.

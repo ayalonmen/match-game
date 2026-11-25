@@ -15,7 +15,7 @@ export interface RuneBattleProps {
   enemyFigureHurt?: string;
   /** The scene behind the figure, blurred and darkened (default: enemyImage). */
   stageImage?: string;
-  /** Full body, or closer (cropped at the legs). Default auto: closer when the stage is short. */
+  /** Closer (her upper body, the default since 2026-11-25), full body, or auto (full body when the stage has room). */
   figureFraming?: FigureFraming;
   /** Her two wards (Ash and Hex) stand in front of her; false is the solo fight. Default true. */
   wards?: boolean;
@@ -85,7 +85,7 @@ export function RuneBattle(props: RuneBattleProps) {
     enemyFigure,
     enemyFigureHurt,
     stageImage,
-    figureFraming = 'auto',
+    figureFraming = 'close',
     wards = true,
     difficulty = 'normal',
     rules,

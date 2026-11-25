@@ -136,9 +136,9 @@
   pointer-events: none;
 }
 .er-stage.er-close .er-fig {
-  top: calc(var(--hud, 110px) - 4px);
+  top: calc(var(--hud, 110px) - 6px);
   bottom: auto;
-  height: calc((100% - var(--hud, 110px) + 4px) * 1.7);
+  height: calc((100% - var(--hud, 110px) + 6px) * 1.9);
   transform-origin: 50% 40%;
 }
 .er-fig::after {
@@ -266,9 +266,9 @@
 .er-hpbar {
   position: relative;
   width: 100%;
-  max-width: 460px;
+  max-width: 300px;
   aspect-ratio: 900 / 197;
-  margin: -8px auto -10px;
+  margin: -12px auto -12px;
 }
 .er-hpch,
 .er-hpbar .er-num {
@@ -312,7 +312,7 @@
   display: grid;
   place-items: center;
   font-family: var(--display);
-  font-size: 15px;
+  font-size: 13px;
   color: #fff7e6;
   text-shadow: 0 1px 2px #000;
   font-variant-numeric: tabular-nums;
@@ -558,7 +558,7 @@
   padding: 0 max(4px, env(safe-area-inset-right, 0px)) 0 max(4px, env(safe-area-inset-left, 0px));
 }
 /* the antique gold board (2026-11-25): its 7x6 cells line up with the tiles; layout() places it */
-.er-board-frame {
+.er-root .er-board-frame {
   position: absolute;
   max-width: none;
   pointer-events: none;
@@ -729,7 +729,7 @@
 }
 /* party */
 .er-hero {
-  padding: 0 max(10px, env(safe-area-inset-right, 0px)) 8px max(10px, env(safe-area-inset-left, 0px));
+  padding: 0 max(10px, env(safe-area-inset-right, 0px)) 4px max(10px, env(safe-area-inset-left, 0px));
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -1452,8 +1452,7 @@
     display: none;
   }
   .er-hpbar {
-    max-width: 320px;
-    margin: -8px auto -9px;
+    max-width: 270px;
   }
   .er-bossbar .er-vexa-cd {
     min-width: 26px;
