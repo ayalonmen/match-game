@@ -3,3 +3,4 @@ export * from './rng';
 export * from './board';
 export * from './dice';
 export * from './rules';
+export * from './fate';

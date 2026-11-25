@@ -107,3 +107,41 @@ describe('rules', () => {
     expect(battleTier(false, 0, 0.9)).toBe('critFail');
   });
 });
+
+describe('thrown die and lightning runes', () => {
+  it('bands by the number, and a golden die keeps the better of two', async () => {
+    const { fateBand, rollFate } = await import('./fate');
+    expect([1, 2, 9, 10, 16, 17, 19, 20].map(fateBand)).toEqual([
+      'backfire',
+      'minor',
+      'minor',
+      'major',
+      'major',
+      'epic',
+      'epic',
+      'legend',
+    ]);
+    const rng = createRng(3);
+    for (let i = 0; i < 200; i++) {
+      const f = rollFate(rng, true);
+      expect(f.roll).toBe(Math.max(f.a, f.b!));
+      expect(f.fate.band).toBe(fateBand(f.roll));
+      if (f.fate.id === 'meteor') {
+        const r = Math.floor(f.at / COLS),
+          c = f.at % COLS;
+        expect(r > 0 && r < ROWS - 1 && c > 0 && c < COLS - 1).toBe(true);
+      }
+    }
+  });
+  it('a bolt clears its column, a storm the 3x3 around it (cut at the edges)', async () => {
+    const { blastCells } = await import('./fate');
+    expect(blastCells('bolt', 2, 3)).toEqual([0, 1, 2, 3, 4, 5].map((r) => key(r, 3)));
+    expect(blastCells('storm', 2, 3)).toHaveLength(9);
+    expect(blastCells('storm', 0, 0).sort((a, b) => a - b)).toEqual([key(0, 0), key(0, 1), key(1, 0), key(1, 1)]);
+  });
+  it('never spawns more than the cap', async () => {
+    const { spawnCharge, LIGHTNING } = await import('./fate');
+    const rng = createRng(1);
+    for (let i = 0; i < 500; i++) expect(spawnCharge(rng, LIGHTNING.max)).toBeNull();
+  });
+});

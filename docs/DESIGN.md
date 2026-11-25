@@ -16,12 +16,20 @@ approved the prototype ("lock this"). The prototype is `docs/reference/ember-run
   - Mara, Fire Volley: 6 burning arrows of 14, the last one double.
   - Elin, Mending Herbs: heal 30, every skull becomes a vial.
 - Match 4 forges a d20 of that rune, match 5 (or an L / T of five) a golden one that rolls twice and keeps the best.
-  Drag it up to aim, or tap it. d20 + 2 against DC 12:
-  - natural 1: 8 to the party and two runes turn to skulls;
-  - fail: roll ×2;
-  - success: roll ×4 and the rune's power (steel: another strike, fire: 2 burn, ruby: +25% charge to all,
-    shield: +12 armor, vial: heal 20);
-  - natural 20: 120, a bigger power, and the die's row breaks.
+  Tapping it brings up Playful Roll's 3D throw (`features/dice`, ported 2026-11-25: the die in the thumb zone,
+  flick or tap, bounces off the screen edges). The number and the fate are decided from the seeded RNG as the die
+  leaves the hand (`engine/fate.ts`, `rollFate`). The number picks a band and the band a random fate
+  (Ayalon 2026-11-25: "have it with random effects"):
+  - 1, backfire: Cracked Die (8 to the party, two skulls) or Hex Echo (three skulls);
+  - 2-9, minor: Spark (strike of roll ×3), Mend (heal 15), Bulwark (+10 armor), Kindle (2 burn), Rally (+20% charge);
+  - 10-16, major: Chain Lightning (five runes struck), Firestorm (4 burn, roll ×2), Transmute (six runes become the
+    die's rune), Second Wind (heal 35), Stagger (the foe loses a turn, roll ×3);
+  - 17-19, epic: Meteor (3×3 blast, 60), Lightning Lance (a row and a column, 50), Time Stop (every foe waits two
+    more turns, 40), Storm Call (three lightning runes, 40);
+  - natural 20: Cataclysm (every rune of the commonest kind breaks, 150).
+  Without WebGL the die flies up in 2D as before and the same fate plays.
+- Lightning runes (2026-11-25): a new rune falls in charged 5% of the time (at most 3 on the board). A bolt clears
+  its column, a storm the 3×3 around it, when it is matched; charged runes caught in a blast go off too.
 - The party shares 140 HP.
 
 ## The enemy
