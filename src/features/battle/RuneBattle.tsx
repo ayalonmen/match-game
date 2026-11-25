@@ -22,6 +22,12 @@ export interface RuneBattleProps {
   onTutorialEnd?: () => void;
   /** A `performance.now()` time: the board deals in no sooner (the host's entrance plays first). */
   startAt?: number;
+  /** Open on the enemy card (art, name, health, clock, moves), the lines waiting for startAt. */
+  introCard?: boolean;
+  /** The line under her name on the card (default "Demon of the Den"). */
+  enemyTitle?: string;
+  /** The card's speed (the host's entrance pace; 1 is as designed). */
+  introPace?: number;
   introTitle?: string;
   introSub?: string;
   /** With onContinue: also offer Fight again after the fight. */
@@ -73,6 +79,9 @@ export function RuneBattle(props: RuneBattleProps) {
     seed,
     tutorial,
     startAt,
+    introCard = false,
+    enemyTitle = 'Demon of the Den',
+    introPace,
   } = props;
   const { introTitle = 'Ember Runes', introSub, allowRetry = false, mustWin = false, devTools = false } = props;
   const hasContinue = !!props.onContinue;
@@ -86,6 +95,9 @@ export function RuneBattle(props: RuneBattleProps) {
     seed,
     tutorial,
     startAt,
+    introCard,
+    enemyTitle,
+    introPace,
     introTitle,
     introSub,
     allowRetry,
@@ -106,6 +118,9 @@ export function RuneBattle(props: RuneBattleProps) {
       seed: s.seed ?? Math.floor(Math.random() * 2 ** 31),
       intro: showTutorial(s.tutorial),
       startAt: s.startAt,
+      introCard: !!s.introCard,
+      enemyTitle: s.enemyTitle,
+      introPace: s.introPace,
       introTitle: s.introTitle!,
       introSub: s.introSub ?? `Fight ${s.enemyName}`,
       devTools: !!s.devTools,

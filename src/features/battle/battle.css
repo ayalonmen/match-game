@@ -956,3 +956,185 @@
   color: var(--dim);
   font-size: 14px;
 }
+/* the enemy card before the fight (Ember Wheels' enemy-only intro card, approved 2026-11-23) */
+.er-foe {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  background: #060303;
+  overflow: hidden;
+}
+.er-foe-art {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 68%;
+  overflow: hidden;
+}
+.er-foe-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none !important;
+  object-fit: cover;
+  object-position: 57% 40%;
+}
+.er-foe-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(6, 3, 3, 0.6) 0,
+    rgba(6, 3, 3, 0) 22%,
+    rgba(6, 3, 3, 0) 74%,
+    rgba(6, 3, 3, 0.8) 92%,
+    #060303 100%
+  );
+}
+.er-foe-plate {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  top: 57%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.er-f-eye {
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  color: var(--ember);
+  text-shadow: 0 1px 3px #000;
+}
+.er-f-name {
+  font-family: var(--display);
+  font-size: min(64px, 16vw);
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: var(--gold);
+  text-shadow:
+    0 3px 0 #2a0e02,
+    0 0 30px rgba(0, 0, 0, 0.9);
+  transform-origin: 0 70%;
+}
+.er-f-title {
+  font-family: var(--display);
+  font-size: 15px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-shadow: 0 1px 4px #000;
+}
+.er-f-hp {
+  position: relative;
+  height: 26px;
+  margin-top: 12px;
+  border-radius: 13px;
+  background: #2a0e08;
+  border: 2px solid #c9a464;
+  overflow: hidden;
+  box-shadow: 0 2px 10px #000;
+}
+.er-f-hp i {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, #ff5468, #a3142a);
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.25);
+  transform-origin: 0 50%;
+}
+.er-f-hp span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: #fff7e6;
+  text-shadow: 0 1px 2px #000;
+  font-variant-numeric: tabular-nums;
+}
+.er-f-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+.er-f-stat {
+  border-top: 1px solid rgba(201, 164, 100, 0.35);
+  padding-top: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.er-f-stat small {
+  font-weight: 800;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--dim);
+}
+.er-f-stat b {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 30px;
+  line-height: 1;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 12px rgba(226, 112, 46, 0.5);
+}
+.er-f-stat b em {
+  font-family: var(--display);
+  font-size: 13px;
+  font-style: normal;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  margin-left: 6px;
+}
+.er-f-moves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.er-f-moves span {
+  padding: 6px 10px 5px;
+  border-radius: 4px;
+  background: #1c0d07;
+  border: 1px solid rgba(201, 164, 100, 0.55);
+  font-family: var(--display);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--gold);
+}
+.er-f-rage {
+  margin-top: 8px;
+  font-size: 15px;
+  line-height: 1.35;
+  font-style: italic;
+  color: #e8a27a;
+}
+.er-f-rage b {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 12px;
+  font-style: normal;
+  letter-spacing: 0.16em;
+  color: #ff7a4a;
+  margin-right: 4px;
+}
+.er-f-skip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: max(16px, env(safe-area-inset-top, 0px));
+  text-align: center;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: #8a7a60;
+}

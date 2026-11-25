@@ -76,6 +76,12 @@ export interface ControllerOptions {
   onTutorialEnd: () => void;
   /** A `performance.now()` time: the board waits for it before dealing in (the host's entrance plays first). */
   startAt?: number;
+  /** Open on the enemy card (her art, name, health, clock, moves) before the fight, as Ember Wheels did. */
+  introCard?: boolean;
+  /** The line under her name on the card. */
+  enemyTitle?: string;
+  /** The card's speed (the host's entrance pace; 1 is as designed). */
+  introPace?: number;
 }
 
 export interface BattleHandle {
@@ -226,6 +232,22 @@ function markup(o: ControllerOptions) {
   <div class="er-cutin"><div class="er-dim"></div><div class="er-band"><div class="er-lines"></div></div><img class="er-cut-hero" alt=""><div class="er-title"></div><div class="er-who"></div><div class="er-flash"></div></div>
   <div class="er-banner"></div>
   <div class="er-overlay" hidden></div>
+  <div class="er-foe" hidden>
+    <div class="er-foe-art"><img class="er-foe-img" alt=""></div>
+    <div class="er-foe-plate">
+      <div class="er-f-eye">BLOCKS YOUR PATH</div>
+      <div class="er-f-name"></div>
+      <div class="er-f-title"></div>
+      <div class="er-f-hp"><i></i><span></span></div>
+      <div class="er-f-row">
+        <div class="er-f-stat"><small class="er-f-s1"></small><b class="er-f-v1"></b></div>
+        <div class="er-f-stat"><small>ACTS EVERY</small><b class="er-f-every"></b></div>
+      </div>
+      <div class="er-f-moves"></div>
+      <div class="er-f-rage"></div>
+    </div>
+    <div class="er-f-skip">TAP TO SKIP</div>
+  </div>
 </div>`;
 }
 
@@ -2416,9 +2438,104 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => (layout(), sizeP())) : null;
   ro?.observe(root);
   sizeP();
+  /* ---------- the enemy card: her art at once, her lines once the host's entrance has broken the story open ---------- */
+  function foeCard(done: () => void) {
+    const card = $('.er-foe'),
+      q = (c: string) => card.querySelector<HTMLElement>(c)!,
+      V = N.foes.vexa,
+      turns = (n: number) => (n === 1 ? 'TURN' : 'TURNS');
+    q('.er-foe-img').setAttribute('src', o.enemyImage);
+    q('.er-f-name').textContent = o.enemyName;
+    q('.er-f-title').textContent = o.enemyTitle ?? '';
+    q('.er-f-every').innerHTML = `${V.every}<em>${turns(V.every)}</em>`;
+    q('.er-f-s1').textContent = WARDS ? 'GUARDED BY' : 'HITS FOR';
+    q('.er-f-v1').innerHTML = WARDS ? '2<em>WARDS</em>' : `${V.dmg}<em>DAMAGE</em>`;
+    const moves = WARDS ? ['SOUL LASH', esc(N.foes.left.name), esc(N.foes.right.name)] : ['SOUL LASH', 'HEX'];
+    q('.er-f-moves').innerHTML = moves.map((m) => `<span>${m.toUpperCase()}</span>`).join('');
+    const when = V.rageEvery === 1 ? 'every turn' : `every ${V.rageEvery} turns`;
+    q('.er-f-rage').innerHTML = WARDS
+      ? `<b>AT HALF HEALTH</b> ${E} enrages: Soul Rend for ${V.rageDmg}, ${when}.`
+      : `<b>AT HALF HEALTH</b> ${E} enrages: Soul Rend for ${V.rageDmg} or a Hex of ${V.rageCurse} runes, ${when}.`;
+    const plate = q('.er-foe-plate'),
+      hpText = q('.er-f-hp span'),
+      chips = q('.er-f-moves').children,
+      cnt = { hp: 0 };
+    hpText.textContent = '0 HP';
+    card.hidden = false;
+    gsap.set(card, { opacity: 1 });
+    gsap.set(plate.children, { opacity: 0 });
+    gsap.set(q('.er-f-skip'), { opacity: 0 });
+    gsap.set(q('.er-f-hp i'), { scaleX: 0 });
+    const pace = o.introPace && o.introPace > 0 ? o.introPace : 1;
+    const d = Math.max(0, ((o.startAt ?? 0) - performance.now()) / 1000) * pace;
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      card.hidden = true;
+      done();
+    };
+    const tl = gsap.timeline({ onComplete: finish });
+    tl.timeScale(pace);
+    tl.fromTo(q('.er-foe-img'), { scale: 1.1 }, { scale: 1, duration: d + 2.6, ease: 'power2.out' }, 0)
+      .to(q('.er-f-skip'), { opacity: 1, duration: 0.3 }, d)
+      .fromTo(q('.er-f-eye'), { opacity: 0, x: -12 }, { opacity: 1, x: 0, duration: 0.25 }, d + 0.05)
+      .fromTo(
+        q('.er-f-name'),
+        { opacity: 0, scale: 1.5 },
+        { opacity: 1, scale: 1, duration: 0.2, ease: 'power3.in' },
+        d + 0.15,
+      )
+      .call(
+        () => {
+          audio();
+          thud(0.4);
+          tone(150, 0.4, 'sawtooth', 0.06, 0.5);
+        },
+        undefined,
+        d + 0.35,
+      )
+      .fromTo(card, { x: 7 }, { x: 0, duration: 0.45, ease: 'elastic.out(1.6,.2)' }, d + 0.35)
+      .fromTo(q('.er-f-title'), { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.25 }, d + 0.45)
+      .fromTo(
+        [q('.er-f-hp'), q('.er-f-row')],
+        { opacity: 0, y: 10 },
+        { opacity: 1, y: 0, duration: 0.22, stagger: 0.06 },
+        d + 0.6,
+      )
+      .to(q('.er-f-hp i'), { scaleX: 1, duration: 0.6, ease: 'power1.out' }, d + 0.68)
+      .call(() => tone(220, 0.6, 'triangle', 0.06, 2), undefined, d + 0.68)
+      .to(
+        cnt,
+        {
+          hp: V.hp,
+          duration: 0.6,
+          ease: 'none',
+          onUpdate: () => {
+            hpText.textContent = `${Math.round(cnt.hp).toLocaleString('en')} HP`;
+          },
+        },
+        d + 0.68,
+      )
+      .set([q('.er-f-moves'), q('.er-f-rage')], { opacity: 1 }, d + 1.2)
+      .fromTo(chips, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.18, stagger: 0.08 }, d + 1.25)
+      .call(() => tone(520, 0.12, 'triangle', 0.05), undefined, d + 1.25)
+      .fromTo(q('.er-f-rage'), { opacity: 0 }, { opacity: 1, duration: 0.3 }, d + 1.55)
+      // held so it can be read, then the plate drops and the fight shows through
+      .to([plate, q('.er-f-skip')], { opacity: 0, y: 30, duration: 0.3, ease: 'power2.in' }, d + 2.9)
+      .to(card, { opacity: 0, duration: 0.35 }, d + 3.05);
+    // a tap skips her lines (not before the host's entrance is over)
+    card.addEventListener('pointerdown', () => {
+      if (performance.now() < (o.startAt ?? 0)) return;
+      tl.kill();
+      gsap.to(card, { opacity: 0, duration: 0.25, onComplete: finish });
+    });
+  }
+
   start(true);
-  if (o.intro) intro();
-  else void begin();
+  const afterCard = () => (o.intro ? intro() : void begin());
+  if (o.introCard && !reduce) foeCard(afterCard);
+  else afterCard();
 
   return {
     destroy() {
