@@ -12,6 +12,7 @@ export function App() {
       difficulty={difficulty}
       seed={seed}
       introSub={q.has('solo') ? 'Solo fight' : 'Combat demo'}
+      tutorial
       devTools
       onEnd={(r) => console.info('[ember-runes] fight over', r)}
       handleRef={(h) => ((window as unknown as { __er: unknown }).__er = h?.debug)}

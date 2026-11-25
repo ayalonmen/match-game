@@ -17,8 +17,11 @@ export interface RuneBattleProps {
   /** Other names or pictures for the party (the powers stay). */
   party?: PartyOverrides;
   seed?: number;
-  /** Show the how-to-play card first (default true); false deals the board in at once. */
+  /** The how-to-play card before the fight: true always, false never, left out once per browser. */
   tutorial?: boolean;
+  onTutorialEnd?: () => void;
+  /** A `performance.now()` time: the board deals in no sooner (the host's entrance plays first). */
+  startAt?: number;
   introTitle?: string;
   introSub?: string;
   /** With onContinue: also offer Fight again after the fight. */
@@ -36,6 +39,23 @@ export interface RuneBattleProps {
   handleRef?: (h: BattleHandle | null) => void;
 }
 
+const SEEN_KEY = 'ember-runes-tutorial-seen';
+function showTutorial(t: boolean | undefined) {
+  if (t !== undefined) return t;
+  try {
+    return localStorage.getItem(SEEN_KEY) !== '1';
+  } catch {
+    return true;
+  }
+}
+function markTutorialSeen() {
+  try {
+    localStorage.setItem(SEEN_KEY, '1');
+  } catch {
+    /* private mode: it shows again next time */
+  }
+}
+
 /** Ember Runes: a match-3 fight. Mounts once per seed / setup; the host owns everything after onContinue. */
 export function RuneBattle(props: RuneBattleProps) {
   const host = useRef<HTMLDivElement>(null);
@@ -51,7 +71,8 @@ export function RuneBattle(props: RuneBattleProps) {
     rules,
     party,
     seed,
-    tutorial = true,
+    tutorial,
+    startAt,
   } = props;
   const { introTitle = 'Ember Runes', introSub, allowRetry = false, mustWin = false, devTools = false } = props;
   const hasContinue = !!props.onContinue;
@@ -64,6 +85,7 @@ export function RuneBattle(props: RuneBattleProps) {
     party,
     seed,
     tutorial,
+    startAt,
     introTitle,
     introSub,
     allowRetry,
@@ -82,7 +104,8 @@ export function RuneBattle(props: RuneBattleProps) {
       enemyName: s.enemyName!,
       enemyImage: s.enemyImage!,
       seed: s.seed ?? Math.floor(Math.random() * 2 ** 31),
-      intro: !!s.tutorial,
+      intro: showTutorial(s.tutorial),
+      startAt: s.startAt,
       introTitle: s.introTitle!,
       introSub: s.introSub ?? `Fight ${s.enemyName}`,
       devTools: !!s.devTools,
@@ -91,6 +114,10 @@ export function RuneBattle(props: RuneBattleProps) {
       hasContinue: s.hasContinue,
       onEnd: (r) => cbs.current.onEnd?.(r),
       onContinue: (r) => cbs.current.onContinue?.(r),
+      onTutorialEnd: () => {
+        markTutorialSeen();
+        cbs.current.onTutorialEnd?.();
+      },
     });
     cbs.current.handleRef?.(h);
     return () => {

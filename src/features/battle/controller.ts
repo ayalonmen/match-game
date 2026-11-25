@@ -72,6 +72,10 @@ export interface ControllerOptions {
   hasContinue: boolean;
   onEnd: (r: BattleResult) => void;
   onContinue: (r: BattleResult) => void;
+  /** The player closed the how-to-play card. */
+  onTutorialEnd: () => void;
+  /** A `performance.now()` time: the board waits for it before dealing in (the host's entrance plays first). */
+  startAt?: number;
 }
 
 export interface BattleHandle {
@@ -2342,6 +2346,8 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     audio();
     overlay.hidden = true;
     S.busy = true;
+    const hold = (o.startAt ?? 0) - performance.now();
+    if (hold > 0) await new Promise<void>((r) => later(r, hold));
     await dealBoard();
     S.busy = false;
     if (WARDS) {
@@ -2363,7 +2369,10 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       <li><div class="er-mini">20</div><span>Match 4 to forge a d20 of that rune. Drag it up and let go to throw it at a foe (or just tap it). It rolls d20 + ${N.dieBonus} against DC ${N.dieDC}: a success adds the rune's power, a natural 20 crits and breaks its row, a 1 backfires. Match 5 for a golden die that rolls twice and keeps the best.</span></li>
     </ul>
     <button class="er-btn er-go-btn">Fight</button></div>`;
-    overlay.querySelector<HTMLElement>('.er-go-btn')!.addEventListener('click', () => void begin());
+    overlay.querySelector<HTMLElement>('.er-go-btn')!.addEventListener('click', () => {
+      o.onTutorialEnd();
+      void begin();
+    });
   }
   function freshFoe(f: FoeRules): Foe {
     return { ...f, max: f.hp, cd: f.every, burn: 0, alive: true, enraged: false, next: 'lash' };
