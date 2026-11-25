@@ -39,8 +39,12 @@ const canvas = (w: number, h: number) => {
   return cv;
 };
 
-/** One face: colour, an engraving height map, and a roughness / metalness map. */
-export function faceMaps(num: number): FaceMaps {
+/**
+ * One face: colour, an engraving height map, and a roughness / metalness map. With `icon` (an SVG path in a
+ * 100x100 box, filled even-odd) the face carries that icon instead of its number; face 20 still shines.
+ */
+export function faceMaps(num: number, icon?: string): FaceMaps {
+  const glyph = icon ? new Path2D(icon) : null;
   const sk = SKIN;
   const P = (t: [number, number]) => [t[0] * 256, (1 - t[1]) * 256];
   const pa = P(TA),
@@ -72,6 +76,14 @@ export function faceMaps(num: number): FaceMaps {
       x.closePath();
       x.fill();
     });
+    if (glyph) {
+      x.save();
+      x.translate(128 - 44, 150 - 46);
+      x.scale(0.88, 0.88);
+      x.fill(glyph, 'evenodd');
+      x.restore();
+      return;
+    }
     x.textAlign = 'center';
     x.textBaseline = 'middle';
     x.font = font;

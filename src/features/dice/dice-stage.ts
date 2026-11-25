@@ -101,9 +101,18 @@ export class DiceStage {
   private readonly sounds: SoundBoard;
   private readonly reduced: boolean;
   private readonly spark: Spark;
+  private readonly icons?: readonly string[];
 
-  constructor(host: HTMLElement, sounds: SoundBoard, reduced: boolean, spark: Spark = () => {}) {
+  /** `icons`: an icon (SVG path, 100x100 box) for each face 1-20, engraved in place of the numbers. */
+  constructor(
+    host: HTMLElement,
+    sounds: SoundBoard,
+    reduced: boolean,
+    spark: Spark = () => {},
+    icons?: readonly string[],
+  ) {
     this.host = host;
+    this.icons = icons;
     this.sounds = sounds;
     this.reduced = reduced;
     this.spark = spark;
@@ -169,7 +178,7 @@ export class DiceStage {
   private paintNumbers() {
     if (this.disposed) return;
     const fresh: FaceMaps[] = [];
-    for (let n = 1; n <= 20; n++) fresh.push(faceMaps(n));
+    for (let n = 1; n <= 20; n++) fresh.push(faceMaps(n, this.icons?.[n - 1]));
     this.all.forEach((d) =>
       d.mats.forEach((m, i) => {
         if (i >= 20) return;

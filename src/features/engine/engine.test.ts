@@ -109,18 +109,13 @@ describe('rules', () => {
 });
 
 describe('thrown die and lightning runes', () => {
-  it('bands by the number, and a golden die keeps the better of two', async () => {
-    const { fateBand, rollFate } = await import('./fate');
-    expect([1, 2, 9, 10, 16, 17, 19, 20].map(fateBand)).toEqual([
-      'backfire',
-      'minor',
-      'minor',
-      'major',
-      'major',
-      'epic',
-      'epic',
-      'legend',
-    ]);
+  it('faces run weakest to strongest, every fate is on the die, and a golden die keeps the higher face', async () => {
+    const { fateBand, rollFate, FACES, FATES } = await import('./fate');
+    expect(FACES).toHaveLength(20);
+    const order = ['backfire', 'minor', 'major', 'epic', 'legend'];
+    const bands = FACES.map((_, i) => order.indexOf(fateBand(i + 1)));
+    expect(bands).toEqual([...bands].sort((a, b) => a - b));
+    expect(new Set(FACES)).toEqual(new Set(Object.values(FATES).flat().map((f) => f.id)));
     const rng = createRng(3);
     for (let i = 0; i < 200; i++) {
       const f = rollFate(rng, true);

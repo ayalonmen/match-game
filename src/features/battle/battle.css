@@ -1026,6 +1026,17 @@
   pointer-events: none;
   padding: 0 16px;
 }
+.er-banner .er-fate-icon {
+  display: block;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 4px;
+  filter: drop-shadow(0 0 10px var(--ember)) drop-shadow(0 2px 3px #000);
+}
+.er-tdie .er-dn-icon {
+  width: 46%;
+  height: 46%;
+}
 .er-banner small {
   display: block;
   font-family: var(--body);

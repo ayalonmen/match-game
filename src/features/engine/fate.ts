@@ -11,7 +11,6 @@ export type FateBand = 'backfire' | 'minor' | 'major' | 'epic' | 'legend';
 
 export type FateId =
   | 'cracked'
-  | 'hexEcho'
   | 'spark'
   | 'mend'
   | 'bulwark'
@@ -42,10 +41,9 @@ const F = (id: FateId, band: FateBand, name: string, text: string): Fate => ({ i
 export const FATES: Record<FateBand, Fate[]> = {
   backfire: [
     F('cracked', 'backfire', 'Cracked Die', 'The party takes 8 and two runes turn to skulls'),
-    F('hexEcho', 'backfire', 'Hex Echo', 'Three runes turn to skulls'),
   ],
   minor: [
-    F('spark', 'minor', 'Spark', 'A strike of three times the roll'),
+    F('spark', 'minor', 'Spark', 'A strike of 30'),
     F('mend', 'minor', 'Mend', 'The party heals 15'),
     F('bulwark', 'minor', 'Bulwark', '+10 armor'),
     F('kindle', 'minor', 'Kindle', '2 burn on the foe'),
@@ -53,10 +51,10 @@ export const FATES: Record<FateBand, Fate[]> = {
   ],
   major: [
     F('chain', 'major', 'Chain Lightning', 'Lightning strikes five runes on the board'),
-    F('firestorm', 'major', 'Firestorm', '4 burn and a strike of twice the roll'),
+    F('firestorm', 'major', 'Firestorm', '4 burn and a strike of 25'),
     F('transmute', 'major', 'Transmute', 'Six runes become the die’s rune'),
     F('secondWind', 'major', 'Second Wind', 'The party heals 35'),
-    F('stagger', 'major', 'Stagger', 'The foe loses a turn, and a strike of three times the roll'),
+    F('stagger', 'major', 'Stagger', 'The foe loses a turn, and a strike of 30'),
   ],
   epic: [
     F('meteor', 'epic', 'Meteor', 'A 3×3 blast on the board and 60 damage'),
@@ -71,18 +69,17 @@ export const FATES: Record<FateBand, Fate[]> = {
 export const FATE = {
   crackedHurt: 8,
   crackedSkulls: 2,
-  hexEchoSkulls: 3,
-  sparkMult: 3,
+  spark: 30,
   mend: 15,
   bulwark: 10,
   kindle: 2,
   rally: 20,
   chainRunes: 5,
   firestormBurn: 4,
-  firestormMult: 2,
+  firestormHit: 25,
   transmuteRunes: 6,
   secondWind: 35,
-  staggerMult: 3,
+  stagger: 30,
   meteor: 60,
   lance: 50,
   timeStopTurns: 2,
@@ -92,29 +89,58 @@ export const FATE = {
   cataclysm: 150,
 };
 
-/** 1 backfires, 2-9 minor, 10-16 major, 17-19 epic, a natural 20 legendary. */
-export function fateBand(roll: number): FateBand {
-  return roll <= 1 ? 'backfire' : roll <= 9 ? 'minor' : roll <= 16 ? 'major' : roll <= 19 ? 'epic' : 'legend';
-}
+const BY_ID = Object.fromEntries(Object.values(FATES).flat().map((f) => [f.id, f])) as Record<FateId, Fate>;
+
+/**
+ * The fate on each face, 1 to 20, weakest to strongest: 1 backfires (5%), 2-9 minor (40%), 10-15 major (30%),
+ * 16-19 epic (20%), 20 the Cataclysm (5%).
+ */
+export const FACES: FateId[] = [
+  'cracked',
+  'kindle',
+  'bulwark',
+  'mend',
+  'rally',
+  'spark',
+  'bulwark',
+  'mend',
+  'spark',
+  'chain',
+  'stagger',
+  'transmute',
+  'secondWind',
+  'firestorm',
+  'chain',
+  'stormCall',
+  'timeStop',
+  'lance',
+  'meteor',
+  'cataclysm',
+];
+
+/** The fate on a face (1-20). */
+export const faceFate = (n: number): Fate => BY_ID[FACES[n - 1]];
+
+/** The band of a face. */
+export const fateBand = (n: number): FateBand => faceFate(n).band;
 
 export interface FateRoll {
-  /** The first die, and the second for a golden die. */
+  /** The face of the first die, and of the second for a golden die. */
   a: number;
   b: number | null;
-  /** The die that counts. */
+  /** The face that counts. */
   roll: number;
   fate: Fate;
   /** A cell on the board for a fate that aims somewhere (meteor, lance), else -1. */
   at: number;
 }
 
-/** Throws the die (golden: twice, keep the best) and picks its fate. All before anything moves. */
+/** Throws the die (golden: twice, keep the higher face) and reads its fate. All before anything moves. */
 export function rollFate(rng: Rng, golden: boolean): FateRoll {
   const a = 1 + pick(rng, 20);
   const b = golden ? 1 + pick(rng, 20) : null;
   const roll = b == null ? a : Math.max(a, b);
-  const pool = FATES[fateBand(roll)];
-  const fate = pool[pick(rng, pool.length)];
+  const fate = faceFate(roll);
   // meteors land away from the edges so the whole 3x3 is on the board
   const at =
     fate.id === 'meteor'

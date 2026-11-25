@@ -18,6 +18,7 @@ import {
   pickRune,
   rc,
   rollFate,
+  FACES,
   blastCells,
   crossCells,
   spawnCharge,
@@ -35,6 +36,7 @@ import {
 } from '../engine';
 import type { HeroDef, HeroId } from './heroes';
 import { DiceStage, synthSounds } from '../dice';
+import { FATE_ICON, fateIconSvg } from './fate-icons';
 import bladeImg from './assets/blade.webp';
 import emberImg from './assets/ember.webp';
 import wardImg from './assets/ward.webp';
@@ -1407,26 +1409,28 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
   function diceStage() {
     if (dice || diceFailed) return dice;
     try {
-      dice = new DiceStage(diceHost, synthSounds(() => (muted ? null : ac)), reduce, (x, y, n) => sparks(x, y, n));
+      dice = new DiceStage(
+        diceHost,
+        synthSounds(() => (muted ? null : ac)),
+        reduce,
+        (x, y, n) => sparks(x, y, n),
+        FACES.map((id) => FATE_ICON[id]),
+      );
     } catch {
       diceFailed = true; // no WebGL: the die flies the old way
     }
     return dice;
   }
   async function applyFate(f: FateRoll, rune: Rune, tgt: Zone, at: [number, number]) {
-    const roll = f.roll,
-      foe = liveFoe(tgt);
+    const foe = liveFoe(tgt);
     switch (f.fate.id) {
       case 'cracked':
         hurt(FATE.crackedHurt);
         curse(FATE.crackedSkulls);
         break;
-      case 'hexEcho':
-        curse(FATE.hexEchoSkulls);
-        break;
       case 'spark':
         slash(at[0], at[1], ...foeXY(tgt), 30, 0.3, 1, 'rgba(190,230,255,0.5)');
-        hit(tgt, roll * FATE.sparkMult);
+        hit(tgt, FATE.spark);
         break;
       case 'mend':
         heal(FATE.mend);
@@ -1457,7 +1461,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       case 'firestorm':
         if (foe.alive) foe.burn += FATE.firestormBurn;
         embersOn(tgt, 30);
-        hit(tgt, roll * FATE.firestormMult);
+        hit(tgt, FATE.firestormHit);
         break;
       case 'transmute':
         for (const k of randomRunes(FATE.transmuteRunes, rune)) {
@@ -1474,7 +1478,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
         break;
       case 'stagger':
         for (const k of ZONES) if (S.foes[k].alive) S.foes[k].cd += 1;
-        hit(tgt, roll * FATE.staggerMult);
+        hit(tgt, FATE.stagger);
         break;
       case 'meteor': {
         const [r, c] = rc(f.at),
@@ -1516,7 +1520,8 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
         gsap.fromTo(bossFlash, { opacity: 1 }, { opacity: 0, duration: 0.5 });
         if (!reduce) gsap.fromTo(app, { y: -12 }, { y: 0, duration: 0.5, ease: 'elastic.out(1,.25)' });
         const counts: Partial<Record<Rune, number>> = {};
-        for (const row of grid) for (const tl of row) if (tl && isRune(tl.type)) counts[tl.type] = (counts[tl.type] ?? 0) + 1;
+        for (const row of grid)
+          for (const tl of row) if (tl && isRune(tl.type)) counts[tl.type] = (counts[tl.type] ?? 0) + 1;
         const most = (Object.keys(counts) as Rune[]).sort((x, y) => counts[y]! - counts[x]!)[0];
         const cells: number[] = [];
         for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (type(r, c) === most) cells.push(key(r, c));
@@ -1543,8 +1548,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     gsap.to(t.el, { scale: 0, opacity: 0, duration: 0.2, onComplete: () => t.el.remove() });
     grid[r][c] = null;
     const stage3d = diceStage();
-    let f: FateRoll,
-      at: [number, number];
+    let f: FateRoll, at: [number, number];
     if (stage3d) {
       // the die comes into the hand over the dimmed board; it is decided the moment it leaves the hand
       diceHost.dataset.on = 'true';
@@ -1583,7 +1587,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       y1 += 12;
       const el = throwDieEl(dieType, rune, x0, y0);
       await flyDie(el, rune, x0, y0, x1, y1, 0);
-      el.querySelector('.er-dn')!.textContent = String(f.roll);
+      el.querySelector('.er-dn')!.innerHTML = fateIconSvg(f.fate.id, 'er-dn-icon');
       later(() => gsap.to(el, { opacity: 0, scale: 0.4, duration: 0.3, onComplete: () => el.remove() }), 1400);
       at = [x1, y1];
     }
@@ -1595,8 +1599,8 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     else if (band === 'epic' || band === 'major') tone(660, 0.25, 'triangle', 0.1, 1.3);
     else tone(440, 0.2, 'triangle', 0.08, 1.2);
     banner(
-      `${f.roll} · ${esc(f.fate.name)}`,
-      `${BAND[band]}${golden ? ` · golden ${f.a} and ${f.b}, keep ${f.roll}` : ''} · ${esc(f.fate.text)}`,
+      `${fateIconSvg(f.fate.id, 'er-fate-icon')}${esc(f.fate.name)}`,
+      `${BAND[band]}${golden ? ' · the better of two' : ''} · ${esc(f.fate.text)}`,
     );
     if (band === 'backfire') sparks(at[0], at[1], 20);
     else burst(at[0], at[1], band === 'epic' || band === 'legend');
@@ -2666,7 +2670,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       <li><img src="${IMG.vial}" alt=""><span>Vials heal the party, shields give armor that blocks her hits.</span></li>
       <li><img class="er-face-mini" src="${esc(HEROES[2].face)}" alt=""><span>Each of the party charges from one rune: ${k} from blades, ${g} from shields, ${m} from embers, ${el} from vials. Rubies charge everyone. Tap a full portrait to use the power, for free.</span></li>
       <li><div class="er-mini er-mini-stone">ᛉ</div><span>${WARDS ? `Two wards guard ${E}: each one standing cuts her damage taken by 25%. The number on each foe is turns until it acts.` : alone}</span></li>
-      <li><div class="er-mini">20</div><span>Match 4 to forge a d20 of that rune, then tap it and flick the die. Its number picks a random fate: 1 backfires, 2-9 a small boon, 10-16 a strong one, 17-19 an epic one (meteors, lightning lances, time stops), a natural 20 a Cataclysm. Match 5 for a golden die that rolls twice and keeps the best.</span></li>
+      <li><div class="er-mini">20</div><span>Match 4 to forge a d20 of that rune, then tap it and flick the die. Each face carries a fate: one face backfires, most give a small or strong boon, four are epic (meteors, lightning lances, time stops) and one is the Cataclysm. Match 5 for a golden die that rolls twice and keeps the better face.</span></li>
       <li><div class="er-mini er-mini-zap">⚡</div><span>Some runes fall in glowing with lightning. Match one: a bolt clears its whole column, a storm the 3×3 around it.</span></li>
     </ul>
     <button class="er-btn er-go-btn">Fight</button></div>`;
