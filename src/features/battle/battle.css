@@ -844,7 +844,7 @@
 }
 .er-party {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 70px));
+  grid-template-columns: repeat(var(--n, 4), minmax(0, 70px));
   justify-content: center;
   gap: 10px;
 }
@@ -1614,7 +1614,7 @@
     font-size: 12px;
   }
   .er-party {
-    grid-template-columns: repeat(4, minmax(0, 60px));
+    grid-template-columns: repeat(var(--n, 4), minmax(0, 60px));
   }
   .er-hc .er-nm {
     font-size: 10px;

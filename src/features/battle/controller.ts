@@ -251,6 +251,13 @@ const COL: Record<Rune | 'skull', string[]> = {
   skull: ['rgba(170,90,255,1)', 'rgba(120,60,200,1)', 'rgba(220,170,255,1)'],
 };
 // a small lightning mark on a charged rune: a bolt between two arrows (column) or a bolt in a ring (area)
+const RUNE_PLURAL: Record<Rune, string> = {
+  blade: 'blades',
+  ward: 'shields',
+  ember: 'embers',
+  vial: 'vials',
+  ruby: 'rubies',
+};
 const CHARGE_BADGE: Record<Charge, string> = {
   bolt: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1l-3 4h2v3l-3 5h3l-2 6 6-8h-3l2-4h-2V5h2z" fill="#fff"/><path d="M12 23l-3-3h6z" fill="#cfefff"/></svg>',
   storm:
@@ -446,7 +453,8 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
   const types = (): TypeGrid => grid.map((row) => row.map((t) => (t ? t.type : null)));
   const findGroups = () => findTypeGroups(types());
   const hasMoves = () => typeHasMoves(types());
-  const heroOf = (t: Rune) => HEROES.find((h) => h.rune === t)!;
+  /** The hero a rune charges, if they're in this fight. */
+  const heroOf = (t: Rune) => HEROES.find((h) => h.rune === t);
   function appXY(el: Element): [number, number] {
     const a = app.getBoundingClientRect(),
       b = el.getBoundingClientRect();
@@ -798,7 +806,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     if (t === 'ruby') HEROES.forEach((h) => (S.charge[h.id] = Math.min(100, S.charge[h.id] + N.rubyCharge * n)));
     else {
       const h = heroOf(t);
-      S.charge[h.id] = Math.min(100, S.charge[h.id] + N.charge * n);
+      if (h) S.charge[h.id] = Math.min(100, S.charge[h.id] + N.charge * n);
     }
   }
 
@@ -2632,6 +2640,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
   pods.right.addEventListener('click', () => lockOn('right'));
   pods.vexa.addEventListener('click', () => lockOn('vexa'));
   const party = $('.er-party');
+  party.style.setProperty('--n', String(HEROES.length));
   party.innerHTML = HEROES.map(
     (h) =>
       `<button class="er-hc" data-h="${h.id}" aria-label="${esc(h.name)}: ${esc(h.power)}" style="background-image:url('${cardFrameImg}')"><img class="er-face" src="${esc(h.face)}" alt=""><span class="er-pct"></span><span class="er-hc-rune" style="background-image:url('${cardOrbImg}')"><img src="${IMG[h.rune]}" alt=""></span><span class="er-nm">${esc(h.name)}</span><span class="er-pw">${esc(h.power)}</span><span class="er-cbar"><i class="er-fill"></i></span></button>`,
@@ -2778,14 +2787,18 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
   }
   function intro() {
     overlay.hidden = false;
-    const [k, g, m, el] = HEROES.map((h) => esc(h.name));
+    const charges = HEROES.map((h) => `${esc(h.name)} from ${RUNE_PLURAL[h.rune]}`);
+    const chargeLine =
+      HEROES.length === 1
+        ? `${esc(HEROES[0].name)} charges from ${RUNE_PLURAL[HEROES[0].rune]} and rubies.`
+        : `Each of the party charges from one rune: ${charges.slice(0, -1).join(', ')} and ${charges[charges.length - 1]}. Rubies charge everyone.`;
     const V = N.foes.vexa;
     const alone = `${E} fights alone. Every ${V.every} turns she acts, switching between Soul Lash (a heavy hit on the party, so keep armor up) and Hex (curses runes into skulls). Enraged at half health, she acts ${V.rageEvery === 1 ? 'every turn' : `every ${V.rageEvery} turns`}. The red number is turns until she acts.`;
     overlay.innerHTML = `<div class="er-card"><h1>${esc(o.introTitle)}</h1><p class="er-sub">${esc(o.introSub)}</p>
     <ul>
       <li><img src="${IMG.blade}" alt=""><span>Swipe to swap runes and line up 3 or more. Blades, embers and rubies fly up and strike whatever stands above their column.</span></li>
       <li><img src="${IMG.vial}" alt=""><span>Vials heal the party, shields give armor that blocks her hits.</span></li>
-      <li><img class="er-face-mini" src="${esc(HEROES[2].face)}" alt=""><span>Each of the party charges from one rune: ${k} from blades, ${g} from shields, ${m} from embers, ${el} from vials. Rubies charge everyone. Tap a full portrait to use the power, for free.</span></li>
+      <li><img class="er-face-mini" src="${esc(HEROES[HEROES.length - 1].face)}" alt=""><span>${chargeLine} Tap a full portrait to use the power, for free.</span></li>
       <li><div class="er-mini er-mini-stone">ᛉ</div><span>${WARDS ? `Two wards guard ${E}: each one standing cuts her damage taken by 25%. The number on each foe is turns until it acts.` : alone}</span></li>
       <li><div class="er-mini">20</div><span>Match 4 to forge a silver d10: tap it and it strikes for its roll (a 10 crits). Match 5 for the golden d20: tap it, flick the die, and the face it lands on is your fate: Blade Storm (every rune turns to blades), Hero Surge (a random hero's power, free) or Tempest (lightning runes that all go off).</span></li>
       <li><div class="er-mini er-mini-zap">⚡</div><span>Some runes fall in glowing with lightning. Match one: a bolt clears its whole column, a storm the 3×3 around it.</span></li>

@@ -77,6 +77,11 @@ export const HEROES: HeroDef[] = [
 /** A host's changes to a hero: another name or other pictures (the power stays). */
 export type PartyOverrides = Partial<Record<HeroId, Partial<Pick<HeroDef, 'name' | 'face' | 'cut'>>>>;
 
-export function partyFor(overrides: PartyOverrides = {}): HeroDef[] {
-  return HEROES.map((h) => ({ ...h, ...overrides[h.id] }));
+/**
+ * The party for a fight: the heroes in `members` (default all four, in the usual order; Kael, the story's hero,
+ * always fights), with the host's changes.
+ */
+export function partyFor(overrides: PartyOverrides = {}, members?: readonly HeroId[]): HeroDef[] {
+  const pick = members ? new Set<HeroId>(['kael', ...members]) : null;
+  return HEROES.filter((h) => !pick || pick.has(h.id)).map((h) => ({ ...h, ...overrides[h.id] }));
 }

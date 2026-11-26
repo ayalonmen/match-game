@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { rulesFor, type Difficulty, type FateId, type Rules } from '../engine';
 import { mountBattle, type BattleHandle, type BattleResult, type FigureFraming } from './controller';
-import { partyFor, type PartyOverrides } from './heroes';
+import { partyFor, type HeroId, type PartyOverrides } from './heroes';
 import vexaImg from './assets/vexa.webp';
 import './battle.css';
 
@@ -24,6 +24,8 @@ export interface RuneBattleProps {
   rules?: Rules;
   /** Other names or pictures for the party (the powers stay). */
   party?: PartyOverrides;
+  /** Who fights: Kael (the story's hero) always, plus these (default all four). */
+  members?: HeroId[];
   seed?: number;
   /** The how-to-play card before the fight: true always, false never, left out once per browser. */
   tutorial?: boolean;
@@ -96,6 +98,7 @@ export function RuneBattle(props: RuneBattleProps) {
     difficulty = 'normal',
     rules,
     party,
+    members,
     seed,
     tutorial,
     startAt,
@@ -119,6 +122,7 @@ export function RuneBattle(props: RuneBattleProps) {
     difficulty,
     rules,
     party,
+    members,
     seed,
     tutorial,
     startAt,
@@ -143,7 +147,7 @@ export function RuneBattle(props: RuneBattleProps) {
     const s = JSON.parse(setup) as typeof props & { hasContinue: boolean };
     const h = mountBattle(el, {
       rules: s.rules ?? rulesFor({ wards: s.wards, difficulty: s.difficulty, enemyName: s.enemyName }),
-      heroes: partyFor(s.party),
+      heroes: partyFor(s.party, s.members),
       enemyName: s.enemyName!,
       enemyImage: s.enemyImage!,
       enemyFigure: s.enemyFigure,
