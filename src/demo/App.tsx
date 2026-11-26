@@ -2,6 +2,7 @@ import { RuneBattle, type Difficulty, type FigureFraming, type HeroId } from '..
 import eddaImg from './assets/edda.webp';
 import eddaHurtImg from './assets/edda-angry.webp';
 import ghoulImg from './assets/drowned-ghoul.webp';
+import ghoulArt from './assets/drowned-ghoul-art.webp';
 
 // The demo page: the solo fight (?wards for the Ash and Hex wards), ?difficulty=easy|normal|hard|brutal, ?seed=123, ?card for the enemy
 // card, ?dev for the test buttons, ?painting for Vexa's painting in place of the figure, ?edda for Edda in place of the drowned ghoul, ?framing=full|auto (default close), ?party=mara,elin for who fights beside Kael.
@@ -26,7 +27,12 @@ export function App() {
                   enemyFigure: eddaImg,
                   enemyFigureHurt: eddaHurtImg,
                 }
-              : { enemyName: 'The Drowned', enemyTitle: 'Ghoul of the Black Fen', enemyFigure: ghoulImg }),
+              : {
+                  enemyName: 'The Drowned',
+                  enemyTitle: 'Ghoul of the Black Fen',
+                  enemyFigure: ghoulImg,
+                  enemyImage: ghoulArt,
+                }),
             figureFraming: (q.get('framing') ?? 'close') as FigureFraming,
           }
         : {})}

@@ -83,6 +83,8 @@ export interface ControllerOptions {
   enemyFigureHurt?: string;
   /** The scene behind the figure, blurred and darkened (default: her painting). */
   stageImage?: string;
+  /** The enemy card's picture (default: the figure, else her painting). The host's own art goes here. */
+  cardImage?: string;
   /** Full body, or closer (cropped at the legs); auto picks closer when the stage is short. */
   figureFraming?: FigureFraming;
   seed: number;
@@ -692,7 +694,13 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
         }
       for (let r = w; r >= 0; r--) {
         // new runes wait just above the board (it clips them) in a loose stack
-        const t = makeTile(RUNES[rand(RUNES.length)], r, c, 'ruby', spawnCharge(rng, chargedOnBoard(), o.lightningChance) ?? undefined),
+        const t = makeTile(
+            RUNES[rand(RUNES.length)],
+            r,
+            c,
+            'ruby',
+            spawnCharge(rng, chargedOnBoard(), o.lightningChance) ?? undefined,
+          ),
           startY = (r - w - 1) * s * 1.12 - s * 0.15;
         gsap.set(t.el, { y: startY });
         grid[r][c] = t;
@@ -1495,7 +1503,13 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
             old.el.remove();
             grid[r][c] = makeTile('blade', r, c, 'ruby', old.charge);
             const el = tile(r, c).el;
-            gsap.from(el, { scale: 0, rotation: -180, duration: 0.35, delay: r * 0.06 + c * 0.02, ease: 'back.out(2)' });
+            gsap.from(el, {
+              scale: 0,
+              rotation: -180,
+              duration: 0.35,
+              delay: r * 0.06 + c * 0.02,
+              ease: 'back.out(2)',
+            });
             const [x, y] = cellXY(r, c);
             later(() => sparks(x, y, 4), (r * 0.06 + c * 0.02) * 1000);
           }
@@ -2857,8 +2871,9 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       q = (c: string) => card.querySelector<HTMLElement>(c)!,
       V = N.foes.vexa,
       turns = (n: number) => (n === 1 ? 'TURN' : 'TURNS');
-    q('.er-foe-img').setAttribute('src', o.enemyFigure ?? o.enemyImage);
-    card.classList.toggle('er-foe-fig', FIG);
+    const art = o.cardImage ?? o.enemyFigure ?? o.enemyImage;
+    q('.er-foe-img').setAttribute('src', art);
+    card.classList.toggle('er-foe-fig', FIG && art === o.enemyFigure);
     q('.er-f-name').textContent = o.enemyName;
     q('.er-f-title').textContent = o.enemyTitle ?? '';
     q('.er-f-every').innerHTML = `${V.every}<em>${turns(V.every)}</em>`;
