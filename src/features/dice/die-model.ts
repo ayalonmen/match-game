@@ -10,15 +10,20 @@ const TA: [number, number] = [0.5, 0.93];
 const TB: [number, number] = [0.06, 0.17];
 const TC: [number, number] = [0.94, 0.17];
 
-/** The die's look: crimson with gold engraved numbers and gold edges, to match the choice wheel. */
+/**
+ * The die's look. Ember Runes (2026-11-26) matches Ayalon's antique gold d20: amber faces with fiery veins,
+ * heavy gold edges and gold engravings.
+ */
 export const SKIN = {
-  top: '#5a0e19',
-  bot: '#1e0306',
-  /** The number's ink, top to bottom. */
-  num: ['#fff2cc', '#f0c070', '#b07a32'] as const,
-  line: '#e0a850',
-  bevel: 0xd29a4a,
-  bevelRough: 0.26,
+  top: '#7a2c08',
+  bot: '#260800',
+  /** The engraving's ink, top to bottom. */
+  num: ['#fff4c4', '#f2c560', '#a8741e'] as const,
+  line: '#e8b45a',
+  /** Glowing veins in the amber. */
+  vein: 'rgba(255,190,90,',
+  bevel: 0xe0aa48,
+  bevelRough: 0.22,
   rough: 0.62,
   metal: 0,
   numRough: 0.32,
@@ -98,6 +103,24 @@ export function faceMaps(num: number, icon?: string): FaceMaps {
   bg.addColorStop(1, sk.bot);
   x.fillStyle = bg;
   x.fillRect(0, 0, 256, 256);
+  // fiery veins through the amber
+  x.lineCap = 'round';
+  for (let i = 0; i < 9; i++) {
+    let vx = Math.random() * 256,
+      vy = Math.random() * 256,
+      a = Math.random() * 6.283;
+    x.strokeStyle = sk.vein + (0.12 + Math.random() * 0.18) + ')';
+    x.lineWidth = 0.8 + Math.random() * 1.4;
+    x.beginPath();
+    x.moveTo(vx, vy);
+    for (let j = 0; j < 7; j++) {
+      a += (Math.random() - 0.5) * 1.6;
+      vx += Math.cos(a) * 14;
+      vy += Math.sin(a) * 14;
+      x.lineTo(vx, vy);
+    }
+    x.stroke();
+  }
   // a little grain
   for (let i = 0; i < 260; i++) {
     x.fillStyle = 'rgba(' + (Math.random() < 0.5 ? '255,235,200' : '0,0,0') + ',' + Math.random() * 0.05 + ')';
@@ -211,7 +234,7 @@ export function dieGeometry(): { geometry: THREE.BufferGeometry; faces: Face[] }
   let ico: THREE.BufferGeometry = new THREE.IcosahedronGeometry(1, 0);
   if (ico.index) ico = ico.toNonIndexed();
   const src = ico.attributes.position as THREE.BufferAttribute;
-  const INSET = 0.15;
+  const INSET = 0.2;
   const pos: number[] = [],
     nor: number[] = [],
     uv: number[] = [];

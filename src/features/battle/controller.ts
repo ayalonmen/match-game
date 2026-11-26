@@ -49,6 +49,9 @@ import barFrameImg from './assets/ui/bar-frame.webp';
 import boardFrameImg from './assets/ui/board-frame.webp';
 import cardFrameImg from './assets/ui/card-frame.webp';
 import cardOrbImg from './assets/ui/card-orb.webp';
+import intentFrameImg from './assets/ui/intent-frame.webp';
+import dieSilverImg from './assets/ui/die-silver.webp';
+import dieGoldImg from './assets/ui/die-gold.webp';
 
 const IMG: Record<Rune | 'skull', string> = {
   blade: bladeImg,
@@ -279,7 +282,7 @@ function markup(o: ControllerOptions) {
     <div class="er-shade"></div>
     <div class="er-bossbar${o.devTools ? '' : ' er-few-tools'}">
       <div class="er-hpbar er-vexa-bar" role="meter" aria-label="${E}'s health"><div class="er-hpch"><b></b><i style="background-image:url('${hpFillImg}')"></i></div><img class="er-hpfr" src="${hpFrameImg}" alt=""><span class="er-num"></span></div>
-      <div class="er-row er-intent-row"><span class="er-cd er-vexa-cd">3</span><span class="er-intent"></span><span class="er-chip er-warded">Warded</span><span class="er-chip er-enraged" hidden>Enraged</span><span class="er-chip er-burn er-vexa-burn" hidden></span></div>
+      <div class="er-row er-intent-row"><div class="er-next"><img class="er-next-fr" src="${intentFrameImg}" alt=""><span class="er-cd er-vexa-cd">3</span><div class="er-next-txt"><b class="er-next-name"></b><span class="er-intent"></span></div></div><span class="er-chip er-warded">Warded</span><span class="er-chip er-enraged" hidden>Enraged</span><span class="er-chip er-burn er-vexa-burn" hidden></span></div>
     </div>
     ${o.devTools ? '<div class="er-tools"><button class="er-charge-btn" aria-label="Charge the whole party (test)" title="Charge the party (test)">⚡</button><button class="er-restart-btn" aria-label="Restart fight">↻</button></div>' : ''}
     <div class="er-lockhint">Tap a ward or ${E} to aim every rune at it</div>
@@ -458,7 +461,8 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
 
   /* ---------- board ---------- */
   function dieHTML(t: Die, rune: Rune, size: number) {
-    return `<div class="er-die er-r-${rune} ${t === 'd20a' ? 'er-adv' : ''}" style="--s:${size}"><span class="er-dn">20</span></div><img class="er-dr" src="${IMG[rune]}" alt="">`;
+    // Ayalon's die art (2026-11-26): silver for a match of 4, gold for the golden die of a match of 5
+    return `<div class="er-die ${t === 'd20a' ? 'er-adv' : ''}" style="--s:${size}"><img class="er-die-img" src="${t === 'd20a' ? dieGoldImg : dieSilverImg}" alt=""><span class="er-dn"></span></div><img class="er-dr" src="${IMG[rune]}" alt="">`;
   }
   function makeTile(t: CellType, r: number, c: number, rune: Rune = 'ruby', charge?: Charge): Tile {
     const el = document.createElement('div');
@@ -468,8 +472,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       el.innerHTML =
         (t === 'd20a' ? '<div class="er-rays"></div>' : '') +
         '<div class="er-halo"></div>' +
-        dieHTML(t, rune, s) +
-        (t === 'd20a' ? '<span class="er-advb">ADV</span>' : '');
+        dieHTML(t, rune, s);
     else
       el.innerHTML =
         (charge ? '<span class="er-zap"></span>' : '') +
@@ -1634,7 +1637,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       const p = stage3d.screenPoint(app, kept);
       at = [p.x, p.y];
       const col = f.fate.band === 'backfire' ? 0xb3301a : f.fate.band === 'minor' ? 0xf2b44a : 0x9fd8ff;
-      stage3d.flash(col, f.fate.band === 'legend' || f.fate.band === 'epic' ? 1 : 0.6, 0.35, kept);
+      stage3d.flash(col, f.fate.band === 'legend' || f.fate.band === 'epic' ? 0.5 : 0.3, 0.35, kept);
       // the number is read on the die, then the die goes and the fate's name takes its place
       await wait(700);
       if (dead) return;
@@ -2723,10 +2726,12 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     const vcd = $('.er-vexa-cd');
     vcd.textContent = String(v.cd);
     vcd.classList.toggle('er-soon', v.cd <= 1);
-    $('.er-intent').textContent =
-      !WARDS && v.next === 'hex'
-        ? `Hex curses ${v.enraged ? N.foes.vexa.rageCurse : N.foes.vexa.curse} runes into skulls`
-        : `${v.enraged ? 'Soul Rend' : 'Soul Lash'} hits the party for ${v.enraged ? N.foes.vexa.rageDmg : N.foes.vexa.dmg}`;
+    const hex = !WARDS && v.next === 'hex',
+      V = N.foes.vexa;
+    $('.er-next-name').textContent = hex ? 'Hex' : v.enraged ? 'Soul Rend' : 'Soul Lash';
+    $('.er-intent').innerHTML = hex
+      ? `<em>${v.enraged ? V.rageCurse : V.curse}</em> runes to skulls`
+      : `<em>${v.enraged ? V.rageDmg : V.dmg}</em> party damage`;
     for (const k of ['left', 'right'] as const) {
       const f = S.foes[k],
         p = pods[k];

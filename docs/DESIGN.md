@@ -29,6 +29,10 @@ approved the prototype ("lock this"). The prototype is `docs/reference/ember-run
     Lightning Lance (a row and a column, 50), Meteor (3×3 blast, 60);
   - face 20 (5%): Cataclysm (every rune of the commonest kind breaks, 150).
   Without WebGL the die flies up in 2D as before and the same fate plays.
+- Die art (2026-11-26, Ayalon's images): on the board a silver die for a match of 4 and a gold d20 for the golden
+  die (`assets/ui/die-silver.webp`, `die-gold.webp`); the 3D die matches the gold one (amber faces with veins,
+  thick gold edges). The next move shows in Ayalon's frame (`intent-frame.webp`): turns left in the crimson seal,
+  the move's name and its effect in the capsule.
 - Lightning runes (2026-11-25): a new rune falls in charged 5% of the time (at most 3 on the board). A bolt clears
   its column, a storm the 3×3 around it, when it is matched; charged runes caught in a blast go off too.
 - The party shares 140 HP.
