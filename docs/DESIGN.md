@@ -15,13 +15,24 @@ approved the prototype ("lock this"). The prototype is `docs/reference/ember-run
   - Garran, Shield Wall: +20 armor, every foe waits one more turn.
   - Mara, Fire Volley: 6 burning arrows of 14, the last one double.
   - Elin, Mending Herbs: heal 30, every skull becomes a vial.
-- Match 4 forges a d20 of that rune, match 5 (or an L / T of five) a golden one that rolls twice and keeps the best.
-  Drag it up to aim, or tap it. d20 + 2 against DC 12:
-  - natural 1: 8 to the party and two runes turn to skulls;
-  - fail: roll ×2;
-  - success: roll ×4 and the rune's power (steel: another strike, fire: 2 burn, ruby: +25% charge to all,
-    shield: +12 armor, vial: heal 20);
-  - natural 20: 120, a bigger power, and the die's row breaks.
+- Dice (2026-11-26, Ayalon: "change the dice we roll to d10 and have it only with DMG ... the d20 should still have
+  effects but lets have 3 effects for now that are more impactful"; `engine/fate.ts`):
+  - Match 4 forges a silver d10. Tap it and it spins up to the foe and strikes for roll × 8 (a 10 crits, ×2). No 3D
+    throw, no fate, a plain tile (no halo).
+  - Match 5 (or an L / T of five) forges the gold d20. Tap it and Playful Roll's 3D throw comes up (`features/dice`,
+    flick or tap). Its faces carry three fates as icons (seven, seven and six faces):
+    Blade Storm (every rune and skull on the board turns to blades, then they all match; its matches forge no die,
+    so it can't chain into another golden die), Hero Surge (a random hero's power, free, picked with the roll),
+    Tempest (four runes charge with lightning, one by one, then all go off).
+  Without WebGL the gold die flies up in 2D and the same fate plays.
+  The host can tune them: `d10Damage` (per pip, default 8), `d20Fates` (which fates are on the faces, taking
+  turns; default all three) and `lightningChance` (0 to 1, default 0.05; 0 turns lightning runes off).
+- Die art (2026-11-26, Ayalon's images): on the board a silver die for a match of 4 and a gold d20 for the golden
+  die (`assets/ui/die-silver.webp`, `die-gold.webp`); the 3D die matches the gold one (amber faces with veins,
+  thick gold edges). The next move shows in Ayalon's frame (`intent-frame.webp`): turns left in the crimson seal,
+  the move's name and its effect in the capsule.
+- Lightning runes (2026-11-25): a new rune falls in charged 5% of the time (at most 3 on the board). A bolt clears
+  its column, a storm the 3×3 around it, when it is matched; charged runes caught in a blast go off too.
 - The party shares 140 HP.
 
 ## The enemy
@@ -34,6 +45,30 @@ approved the prototype ("lock this"). The prototype is `docs/reference/ember-run
 - Tap a foe to aim every rune at it.
 - Difficulty scales her health and damage (and the wards'): easy 0.75 / 0.8, normal 1 / 1, hard 1.25 / 1.15,
   brutal 1.5 / 1.3 (`DIFFICULTY` in `engine/rules.ts`).
+
+## The look (2026-11-25)
+
+Ayalon's Water Hag layout (`docs/reference/design/water-hag-layout.png`) with his antique gold art in
+`src/features/battle/assets/ui/`:
+- No name row and no buttons on the stage (Ayalon, to give the figure room; the enemy card shows her name). At the
+  top: her health in Ember Wheels' ornate frame (the textured red fill is clipped, not squeezed), then the countdown
+  seal, her next move and the Warded / Enraged / Burning chips. The test buttons show only with devTools; sound
+  follows the host's `muted`.
+- The board sits in the gold board frame; its 7x6 cells line up with the tiles (`layout()` places the frame from the
+  art's measured grid).
+- Hero cards (70px wide, 60px on short phones) use the card frame: portrait in the window, charging rune in the seal, name, the power in a plate tinted
+  with the hero's colour, the charge in the thin bar. The party's health uses the thin gold bar frame.
+- Short phones (under 740px tall) get a tighter header and narrower cards.
+
+## The enemy as a figure
+
+`enemyFigure` (a Studio full-figure cutout) puts her on the stage in place of the painting: she stands in front of
+`stageImage` (the story's scene; her painting by default), blurred and darkened, with the wards at her feet.
+- Framing: closer by default (her upper body, as big as the stage allows; Ayalon's pick 2026-11-25); `full` shows
+  the whole figure, `auto` picks full body when the stage below the header has 140px or more.
+- She breathes (a slow idle), recoils with a red flash and her hurt mood (`enemyFigureHurt`) when hit, gathers and
+  lunges when she attacks, and breathes faster in a red aura when enraged. Tapping her body aims at her.
+- The enemy card shows the figure too. The demo plays Edda; `?painting` shows Vexa's painting.
 
 ## The story tier
 

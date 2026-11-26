@@ -107,3 +107,41 @@ describe('rules', () => {
     expect(battleTier(false, 0, 0.9)).toBe('critFail');
   });
 });
+
+describe('thrown die and lightning runes', () => {
+  it('the d10 strikes for its roll, a 10 doubles; the d20 carries three fates', async () => {
+    const { rollD10, rollFate, FACES, D10 } = await import('./fate');
+    const rng = createRng(3);
+    for (let i = 0; i < 200; i++) {
+      const d = rollD10(rng);
+      expect(d.roll).toBeGreaterThanOrEqual(1);
+      expect(d.roll).toBeLessThanOrEqual(10);
+      expect(d.dmg).toBe(d.roll * D10.mult * (d.roll === 10 ? D10.crit : 1));
+      const f = rollFate(rng);
+      expect(f.fate.id).toBe(FACES[f.roll - 1]);
+      expect(f.hero).toBeLessThan(4);
+    }
+    expect(new Set(FACES).size).toBe(3);
+  });
+  it('a host can pick the d20 fates, the d10 damage and the lightning chance', async () => {
+    const { facesFor, rollFate, rollD10, spawnCharge } = await import('./fate');
+    expect(new Set(facesFor(['tempest']))).toEqual(new Set(['tempest']));
+    expect(facesFor([])).toHaveLength(20);
+    const rng = createRng(5);
+    for (let i = 0; i < 50; i++) expect(rollFate(rng, 4, facesFor(['heroSurge'])).fate.id).toBe('heroSurge');
+    const d = rollD10(rng, 3);
+    expect(d.dmg).toBe(d.roll * 3 * (d.roll === 10 ? 2 : 1));
+    for (let i = 0; i < 200; i++) expect(spawnCharge(rng, 0, 0)).toBeNull();
+  });
+  it('a bolt clears its column, a storm the 3x3 around it (cut at the edges)', async () => {
+    const { blastCells } = await import('./fate');
+    expect(blastCells('bolt', 2, 3)).toEqual([0, 1, 2, 3, 4, 5].map((r) => key(r, 3)));
+    expect(blastCells('storm', 2, 3)).toHaveLength(9);
+    expect(blastCells('storm', 0, 0).sort((a, b) => a - b)).toEqual([key(0, 0), key(0, 1), key(1, 0), key(1, 1)]);
+  });
+  it('never spawns more than the cap', async () => {
+    const { spawnCharge, LIGHTNING } = await import('./fate');
+    const rng = createRng(1);
+    for (let i = 0; i < 500; i++) expect(spawnCharge(rng, LIGHTNING.max)).toBeNull();
+  });
+});

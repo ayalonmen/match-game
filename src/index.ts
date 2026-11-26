@@ -9,11 +9,17 @@ export {
   type PartyOverrides,
   type BattleResult,
   type BattleHandle,
+  type FigureFraming,
 } from './features/battle';
 export {
   rulesFor,
   battleTier,
   DIFFICULTY,
+  D10,
+  FATES,
+  FATE_IDS,
+  LIGHTNING,
+  type FateId,
   type Rules,
   type FoeRules,
   type RulesOptions,
