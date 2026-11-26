@@ -179,6 +179,31 @@ interface Slash {
   scale: number;
   glow: string;
 }
+/** A lightning bolt: a jagged path that re-forks every few frames while it fades. */
+interface Bolt {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  /** How far the path wanders, as a share of its length. */
+  jag: number;
+  /** Width of the strokes. */
+  w: number;
+  life: number;
+  decay: number;
+  forks: number;
+  paths: [number, number][][];
+  n: number;
+}
+/** A soft wash of light over part of the board (the column or the 3x3 a charged rune clears). */
+interface Wash {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  life: number;
+  decay: number;
+}
 interface Wall {
   t: number;
   life: number;
@@ -1331,40 +1356,76 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
   /* ---------- lightning ---------- */
   /** Blasts from lightning runes: a beam down a column, a burst over a 3x3; every rune caught strikes. */
   async function lightning(blasts: [number, Charge][], cells: number[], m: number) {
-    tone(1400, 0.25, 'sawtooth', 0.06, 0.3);
+    crack();
     for (const [k, ch] of blasts) {
       const [r, c] = rc(k);
-      if (ch === 'bolt') beam(c);
-      else {
-        const [x, y] = cellXY(r, c);
-        ring(x, y, 'rgba(190,230,255,1)', 4, 12);
-        sparks(x, y, 26);
-      }
+      if (ch === 'bolt') beam(c, r);
+      else storm(r, c);
     }
-    if (!reduce) gsap.fromTo(app, { y: -5 }, { y: 0, duration: 0.35, ease: 'elastic.out(1,.3)' });
-    await wait(160);
+    if (!reduce) gsap.fromTo(app, { y: -6 }, { y: 0, duration: 0.4, ease: 'elastic.out(1,.3)' });
+    await wait(220);
     await clearCells(cells, m);
   }
-  /** A white-blue beam down a whole column. */
-  function beam(c: number) {
-    const [x] = cellXY(0, c),
-      b = board.getBoundingClientRect(),
-      a = app.getBoundingClientRect();
-    const el = document.createElement('div');
-    el.className = 'er-beam';
-    el.style.height = b.height + 'px';
-    el.style.width = s * 0.9 + 'px';
-    fx.appendChild(el);
-    gsap.set(el, { x: x - s * 0.45, y: b.top - a.top });
-    gsap.fromTo(
-      el,
-      { scaleX: 0.1, opacity: 1 },
-      { scaleX: 1, opacity: 0, duration: 0.5, ease: 'power2.out', onComplete: () => el.remove() },
-    );
+  /** The bolt: lightning falls from the sky down the whole column, twice, and the column lights up. */
+  function beam(c: number, from = 0) {
+    const [x, top] = cellXY(0, c),
+      [, bot] = cellXY(ROWS - 1, c),
+      [, hy] = cellXY(from, c),
+      y0 = top - s * 1.6,
+      y1 = bot + s * 0.4;
+    wash(x - s / 2, top - s / 2, s, bot - top + s);
+    bolt(x, y0, x, y1, { w: 5, jag: 0.06, forks: 4 });
+    later(() => bolt(x, y0, x, y1, { w: 3.5, jag: 0.08, forks: 2, decay: 0.07 }), 90);
+    emit({ x, y: hy, size: s * 1.1, decay: 0.07, col: 'rgba(170,220,255,1)' });
     for (let r = 0; r < ROWS; r++) {
-      const [px, py] = cellXY(r, c);
-      sparks(px, py, 6);
+      const [, py] = cellXY(r, c);
+      later(() => {
+        emit({ x, y: py, size: s * 0.55, decay: 0.06, col: 'rgba(150,210,255,1)' });
+        sparks(x, py, 7);
+      }, r * 25);
     }
+  }
+  /** The lance's row: a sideways bolt across the board. */
+  function rowBolt(r: number) {
+    const [x0, y] = cellXY(r, 0),
+      [x1] = cellXY(r, COLS - 1);
+    wash(x0 - s / 2, y - s / 2, x1 - x0 + s, s);
+    bolt(x0 - s * 0.8, y, x1 + s * 0.8, y, { w: 4.5, jag: 0.07, forks: 3 });
+  }
+  /** The storm: arcs crackle out from the rune to every cell around it, with a shockwave. */
+  function storm(r: number, c: number) {
+    const [x, y] = cellXY(r, c),
+      r0 = Math.max(0, r - 1),
+      r1 = Math.min(ROWS - 1, r + 1),
+      c0 = Math.max(0, c - 1),
+      c1 = Math.min(COLS - 1, c + 1),
+      [ax, ay] = cellXY(r0, c0),
+      [bx, by] = cellXY(r1, c1);
+    wash(ax - s / 2, ay - s / 2, bx - ax + s, by - ay + s, 0.03);
+    emit({ x, y, size: s * 1.2, decay: 0.07, col: 'rgba(170,220,255,1)' });
+    ring(x, y, 'rgba(255,255,255,1)', 4.5, s * 0.3);
+    later(() => ring(x, y, 'rgba(120,190,255,1)', 3.2, s * 0.3), 80);
+    let i = 0;
+    for (let rr = r0; rr <= r1; rr++)
+      for (let cc = c0; cc <= c1; cc++) {
+        if (rr === r && cc === c) continue;
+        const [tx, ty] = cellXY(rr, cc);
+        later(() => {
+          bolt(x, y, tx, ty, { w: 3, jag: 0.22, forks: 1, decay: 0.06 });
+          sparks(tx, ty, 6);
+        }, i++ * 22);
+      }
+    // and one more round of arcs as it fades
+    later(() => {
+      for (const [dx, dy] of [
+        [-1, -1],
+        [1, 1],
+        [1, -1],
+        [-1, 1],
+      ])
+        bolt(x, y, x + dx * s * 1.2, y + dy * s * 1.2, { w: 2.2, jag: 0.3, forks: 0, decay: 0.08 });
+    }, 200);
+    sparks(x, y, 30);
   }
   /** Breaks these cells: runes strike (their damage, healing, armor), skulls shatter, dice stay. */
   async function clearCells(cells: number[], m: number) {
@@ -1450,7 +1511,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
         let [px, py] = at;
         for (const k of cells) {
           const [x, y] = cellXY(...rc(k));
-          void slash(px, py, x, y, 18, 0.25, 0.7, 'rgba(190,230,255,0.6)', true);
+          bolt(px, py, x, y, { w: 3.5, jag: 0.18, forks: 1, decay: 0.045 });
           [px, py] = [x, y];
         }
         tone(1600, 0.3, 'sawtooth', 0.06, 0.3);
@@ -1491,12 +1552,11 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       }
       case 'lance': {
         const [r, c] = rc(f.at),
-          [x, y] = cellXY(r, c),
-          b = board.getBoundingClientRect(),
-          a = app.getBoundingClientRect();
+          [x, y] = cellXY(r, c);
         hit(tgt, FATE.lance, 'crit');
-        beam(c);
-        void slash(b.left - a.left, y, b.right - a.left, y, 0, 0.3, 1.2, 'rgba(190,230,255,0.6)');
+        beam(c, r);
+        rowBolt(r);
+        crack();
         sparks(x, y, 20);
         await wait(200);
         await clearCells(crossCells(r, c), 1);
@@ -1687,6 +1747,8 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
   let parts: Particle[] = [],
     slashes: Slash[] = [],
     walls: Wall[] = [],
+    bolts: Bolt[] = [],
+    washes: Wash[] = [],
     pRun = false,
     raf = 0;
   const arrows: Arrow[] = [],
@@ -1738,6 +1800,49 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       H = app.clientHeight;
     px.clearRect(0, 0, W, H);
     px.globalCompositeOperation = 'lighter';
+    for (const w of washes) {
+      // a cold wash over the cleared cells: bright in the middle, a lit rim
+      const a = Math.max(0, w.life),
+        cx = w.x + w.w / 2,
+        cy = w.y + w.h / 2,
+        g = px.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w.w, w.h) * 0.7);
+      g.addColorStop(0, `rgba(200,235,255,${0.55 * a})`);
+      g.addColorStop(0.6, `rgba(90,160,255,${0.3 * a})`);
+      g.addColorStop(1, `rgba(40,90,255,${0.08 * a})`);
+      px.fillStyle = g;
+      px.beginPath();
+      px.roundRect(w.x, w.y, w.w, w.h, 10);
+      px.fill();
+      px.strokeStyle = `rgba(190,230,255,${0.3 * a})`;
+      px.lineWidth = 1.5;
+      px.stroke();
+      w.life -= w.decay;
+    }
+    washes = washes.filter((w) => w.life > 0);
+    for (const b of bolts) {
+      // a fresh fork every third frame makes it flicker like real lightning
+      if (b.n++ % 3 === 0) b.paths = boltPaths(b);
+      const a = Math.max(0, b.life),
+        flick = 0.75 + Math.random() * 0.25;
+      px.lineCap = 'round';
+      px.lineJoin = 'round';
+      b.paths.forEach((path, i) => {
+        const k = i === 0 ? 1 : 0.45;
+        for (const [w, c] of [
+          [b.w * 3.2, `rgba(70,140,255,${0.28 * a * flick})`],
+          [b.w * 1.4, `rgba(160,215,255,${0.8 * a * flick})`],
+          [b.w * 0.45, `rgba(255,255,255,${a})`],
+        ] as [number, string][]) {
+          px.strokeStyle = c;
+          px.lineWidth = w * k;
+          px.beginPath();
+          path.forEach(([x, y], j) => (j ? px.lineTo(x, y) : px.moveTo(x, y)));
+          px.stroke();
+        }
+      });
+      b.life -= b.decay;
+    }
+    bolts = bolts.filter((b) => b.life > 0);
     for (const sl of slashes) {
       // crescent slash: thick white core inside a cold glow
       const e = Math.min(1, sl.t),
@@ -1839,7 +1944,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     }
     px.globalAlpha = 1;
     parts = parts.filter((p) => p.life > 0);
-    if (parts.length || arrows.length || slashes.length || walls.length || orbs.length)
+    if (parts.length || arrows.length || slashes.length || walls.length || orbs.length || bolts.length || washes.length)
       raf = requestAnimationFrame(loop);
     else {
       pRun = false;
@@ -2004,6 +2109,55 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
   }
   function ring(x: number, y: number, col: string, grow = 3, size = 6) {
     emit({ x, y, ring: true, size, grow, decay: 0.05, col });
+  }
+  /** A jagged line from one point to another (midpoint displacement). */
+  function zigzag(x0: number, y0: number, x1: number, y1: number, jag: number, depth = 5): [number, number][] {
+    let pts: [number, number][] = [
+      [x0, y0],
+      [x1, y1],
+    ];
+    let off = Math.hypot(x1 - x0, y1 - y0) * jag;
+    for (let d = 0; d < depth; d++) {
+      const next: [number, number][] = [pts[0]];
+      for (let i = 1; i < pts.length; i++) {
+        const [ax, ay] = pts[i - 1],
+          [bx, by] = pts[i],
+          len = Math.hypot(bx - ax, by - ay) || 1,
+          o = (Math.random() * 2 - 1) * off;
+        next.push([(ax + bx) / 2 + (-(by - ay) / len) * o, (ay + by) / 2 + ((bx - ax) / len) * o], pts[i]);
+      }
+      pts = next;
+      off *= 0.55;
+    }
+    return pts;
+  }
+  function boltPaths(b: Bolt): [number, number][][] {
+    const main = zigzag(b.x0, b.y0, b.x1, b.y1, b.jag);
+    const out = [main];
+    for (let i = 0; i < b.forks; i++) {
+      // a fork leaves the main path and dies out to one side
+      const j = 2 + Math.floor(Math.random() * (main.length - 4)),
+        [fx, fy] = main[j],
+        len = Math.hypot(b.x1 - b.x0, b.y1 - b.y0) * (0.12 + Math.random() * 0.18),
+        a = Math.atan2(b.y1 - b.y0, b.x1 - b.x0) + (Math.random() < 0.5 ? -1 : 1) * (0.4 + Math.random() * 0.6);
+      out.push(zigzag(fx, fy, fx + Math.cos(a) * len, fy + Math.sin(a) * len, b.jag * 1.4, 3));
+    }
+    return out;
+  }
+  function bolt(x0: number, y0: number, x1: number, y1: number, o: Partial<Bolt> = {}) {
+    const b: Bolt = { x0, y0, x1, y1, jag: 0.12, w: 4, life: 1, decay: 0.055, forks: 3, paths: [], n: 0, ...o };
+    b.paths = boltPaths(b);
+    bolts.push(b);
+    kick();
+  }
+  function wash(x: number, y: number, w: number, h: number, decay = 0.035) {
+    washes.push({ x, y, w, h, life: 1, decay });
+    kick();
+  }
+  /** A thunderclap: a low crack and a hiss. */
+  function crack() {
+    tone(1400, 0.25, 'sawtooth', 0.06, 0.3);
+    tone(90, 0.35, 'square', 0.05, 0.5);
   }
   // every rune breaks its own way; k scales with the combo
   function breakFx(t: Rune | 'skull', x: number, y: number, k: number) {
