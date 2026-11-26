@@ -6,7 +6,7 @@ import vexaImg from './assets/vexa.webp';
 import './battle.css';
 
 export interface RuneBattleProps {
-  /** The enemy's name and picture (default Vexa, the horned witch). */
+  /** The enemy's name and picture (default Vexa, the horned witch). With a figure, the picture is the enemy card's art. */
   enemyName?: string;
   enemyImage?: string;
   /** A cutout of the whole enemy (a Studio full-figure portrait): she stands on the stage in place of the painting. */
@@ -109,7 +109,14 @@ export function RuneBattle(props: RuneBattleProps) {
     d20Fates,
     lightningChance,
   } = props;
-  const { introTitle = 'Ember Runes', introSub, allowRetry = false, mustWin = false, devTools = false, muted = false } = props;
+  const {
+    introTitle = 'Ember Runes',
+    introSub,
+    allowRetry = false,
+    mustWin = false,
+    devTools = false,
+    muted = false,
+  } = props;
   const hasContinue = !!props.onContinue;
   const setup = JSON.stringify({
     enemyName,
@@ -139,12 +146,13 @@ export function RuneBattle(props: RuneBattleProps) {
     devTools,
     muted,
     hasContinue,
+    ownArt: props.enemyImage !== undefined,
   });
 
   useEffect(() => {
     const el = host.current;
     if (!el) return;
-    const s = JSON.parse(setup) as typeof props & { hasContinue: boolean };
+    const s = JSON.parse(setup) as typeof props & { hasContinue: boolean; ownArt: boolean };
     const h = mountBattle(el, {
       rules: s.rules ?? rulesFor({ wards: s.wards, difficulty: s.difficulty, enemyName: s.enemyName }),
       heroes: partyFor(s.party, s.members),
@@ -153,6 +161,8 @@ export function RuneBattle(props: RuneBattleProps) {
       enemyFigure: s.enemyFigure,
       enemyFigureHurt: s.enemyFigureHurt,
       stageImage: s.stageImage,
+      // the enemy card shows the host's own art when it gave some, else the figure
+      cardImage: s.ownArt && s.enemyFigure ? s.enemyImage : undefined,
       figureFraming: s.figureFraming,
       seed: s.seed ?? Math.floor(Math.random() * 2 ** 31),
       intro: showTutorial(s.tutorial),

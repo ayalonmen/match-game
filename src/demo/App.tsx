@@ -1,13 +1,16 @@
 import { RuneBattle, type Difficulty, type FigureFraming, type HeroId } from '../index';
 import eddaImg from './assets/edda.webp';
 import eddaHurtImg from './assets/edda-angry.webp';
+import ghoulImg from './assets/drowned-ghoul.webp';
+import ghoulArt from './assets/drowned-ghoul-art.webp';
 
 // The demo page: the solo fight (?wards for the Ash and Hex wards), ?difficulty=easy|normal|hard|brutal, ?seed=123, ?card for the enemy
-// card, ?dev for the test buttons, ?painting for Vexa's painting in place of the figure, ?framing=full|auto (default close), ?party=mara,elin for who fights beside Kael.
+// card, ?dev for the test buttons, ?painting for Vexa's painting in place of the figure, ?edda for Edda in place of the drowned ghoul, ?framing=full|auto (default close), ?party=mara,elin for who fights beside Kael.
 const q = new URLSearchParams(location.search);
 const difficulty = (q.get('difficulty') ?? 'normal') as Difficulty;
 const seed = q.has('seed') ? Number(q.get('seed')) : undefined;
 const figure = !q.has('painting');
+const edda = q.has('edda');
 
 export function App() {
   return (
@@ -17,10 +20,19 @@ export function App() {
       seed={seed}
       {...(figure
         ? {
-            enemyName: 'Edda',
-            enemyTitle: 'Huntress of the Pines',
-            enemyFigure: eddaImg,
-            enemyFigureHurt: eddaHurtImg,
+            ...(edda
+              ? {
+                  enemyName: 'Edda',
+                  enemyTitle: 'Huntress of the Pines',
+                  enemyFigure: eddaImg,
+                  enemyFigureHurt: eddaHurtImg,
+                }
+              : {
+                  enemyName: 'The Drowned',
+                  enemyTitle: 'Ghoul of the Black Fen',
+                  enemyFigure: ghoulImg,
+                  enemyImage: ghoulArt,
+                }),
             figureFraming: (q.get('framing') ?? 'close') as FigureFraming,
           }
         : {})}
