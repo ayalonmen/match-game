@@ -25,6 +25,8 @@ approved the prototype ("lock this"). The prototype is `docs/reference/ember-run
     so it can't chain into another golden die), Hero Surge (a random hero's power, free, picked with the roll),
     Tempest (four runes charge with lightning, one by one, then all go off).
   Without WebGL the gold die flies up in 2D and the same fate plays.
+  The host can tune them: `d10Damage` (per pip, default 8), `d20Fates` (which fates are on the faces, taking
+  turns; default all three) and `lightningChance` (0 to 1, default 0.05; 0 turns lightning runes off).
 - Die art (2026-11-26, Ayalon's images): on the board a silver die for a match of 4 and a gold d20 for the golden
   die (`assets/ui/die-silver.webp`, `die-gold.webp`); the 3D die matches the gold one (amber faces with veins,
   thick gold edges). The next move shows in Ayalon's frame (`intent-frame.webp`): turns left in the crimson seal,

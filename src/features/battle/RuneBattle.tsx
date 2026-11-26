@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { rulesFor, type Difficulty, type Rules } from '../engine';
+import { rulesFor, type Difficulty, type FateId, type Rules } from '../engine';
 import { mountBattle, type BattleHandle, type BattleResult, type FigureFraming } from './controller';
 import { partyFor, type PartyOverrides } from './heroes';
 import vexaImg from './assets/vexa.webp';
@@ -42,6 +42,12 @@ export interface RuneBattleProps {
   allowRetry?: boolean;
   /** A loss only offers Try again. */
   mustWin?: boolean;
+  /** The silver d10 (a match of 4): damage per pip, so a roll strikes for roll x this (a 10 doubles). Default 8. */
+  d10Damage?: number;
+  /** The fates on the gold d20's faces (a match of 5). Default all three: bladeStorm, heroSurge, tempest. */
+  d20Fates?: FateId[];
+  /** The chance a new rune falls in charged with lightning, 0 to 1. Default 0.05; 0 turns them off. */
+  lightningChance?: number;
   /** The test buttons (charge the party, restart). */
   devTools?: boolean;
   /** No sound (follow the host's own sound setting). */
@@ -96,6 +102,9 @@ export function RuneBattle(props: RuneBattleProps) {
     introCard = false,
     enemyTitle = 'Demon of the Den',
     introPace,
+    d10Damage,
+    d20Fates,
+    lightningChance,
   } = props;
   const { introTitle = 'Ember Runes', introSub, allowRetry = false, mustWin = false, devTools = false, muted = false } = props;
   const hasContinue = !!props.onContinue;
@@ -116,6 +125,9 @@ export function RuneBattle(props: RuneBattleProps) {
     introCard,
     enemyTitle,
     introPace,
+    d10Damage,
+    d20Fates,
+    lightningChance,
     introTitle,
     introSub,
     allowRetry,
@@ -148,6 +160,9 @@ export function RuneBattle(props: RuneBattleProps) {
       introSub: s.introSub ?? `Fight ${s.enemyName}`,
       devTools: !!s.devTools,
       muted: !!s.muted,
+      d10Damage: s.d10Damage,
+      d20Fates: s.d20Fates,
+      lightningChance: s.lightningChance,
       allowRetry: !!s.allowRetry,
       mustWin: !!s.mustWin,
       hasContinue: s.hasContinue,

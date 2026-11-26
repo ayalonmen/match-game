@@ -123,6 +123,16 @@ describe('thrown die and lightning runes', () => {
     }
     expect(new Set(FACES).size).toBe(3);
   });
+  it('a host can pick the d20 fates, the d10 damage and the lightning chance', async () => {
+    const { facesFor, rollFate, rollD10, spawnCharge } = await import('./fate');
+    expect(new Set(facesFor(['tempest']))).toEqual(new Set(['tempest']));
+    expect(facesFor([])).toHaveLength(20);
+    const rng = createRng(5);
+    for (let i = 0; i < 50; i++) expect(rollFate(rng, 4, facesFor(['heroSurge'])).fate.id).toBe('heroSurge');
+    const d = rollD10(rng, 3);
+    expect(d.dmg).toBe(d.roll * 3 * (d.roll === 10 ? 2 : 1));
+    for (let i = 0; i < 200; i++) expect(spawnCharge(rng, 0, 0)).toBeNull();
+  });
   it('a bolt clears its column, a storm the 3x3 around it (cut at the edges)', async () => {
     const { blastCells } = await import('./fate');
     expect(blastCells('bolt', 2, 3)).toEqual([0, 1, 2, 3, 4, 5].map((r) => key(r, 3)));

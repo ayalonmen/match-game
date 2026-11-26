@@ -19,7 +19,8 @@ import {
   rc,
   rollFate,
   rollD10,
-  FACES,
+  facesFor,
+  type FateId,
   blastCells,
   spawnCharge,
   FATE,
@@ -91,6 +92,12 @@ export interface ControllerOptions {
   introSub: string;
   /** No sound (the host's own sound setting). */
   muted?: boolean;
+  /** The silver d10's damage per pip (default D10.mult). */
+  d10Damage?: number;
+  /** The fates on the gold d20's faces (default all three). */
+  d20Fates?: FateId[];
+  /** The chance a new rune falls in charged with lightning, 0 to 1 (default LIGHTNING.chance; 0 is none). */
+  lightningChance?: number;
   /** The test buttons: charge the whole party, restart. */
   devTools: boolean;
   allowRetry: boolean;
@@ -677,7 +684,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
         }
       for (let r = w; r >= 0; r--) {
         // new runes wait just above the board (it clips them) in a loose stack
-        const t = makeTile(RUNES[rand(RUNES.length)], r, c, 'ruby', spawnCharge(rng, chargedOnBoard()) ?? undefined),
+        const t = makeTile(RUNES[rand(RUNES.length)], r, c, 'ruby', spawnCharge(rng, chargedOnBoard(), o.lightningChance) ?? undefined),
           startY = (r - w - 1) * s * 1.12 - s * 0.15;
         gsap.set(t.el, { y: startY });
         grid[r][c] = t;
@@ -1447,6 +1454,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
   }
 
   /* ---------- the thrown die (2026-11-25): Playful Roll's 3D throw, and a random fate ---------- */
+  const faces = facesFor(o.d20Fates);
   let dice: DiceStage | null = null,
     diceFailed = false,
     /** Set while a Blade Storm's matches resolve, so the storm can't forge the next golden die. */
@@ -1460,7 +1468,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
         synthSounds(() => (muted ? null : ac)),
         reduce,
         (x, y, n) => sparks(x, y, n),
-        FACES.map((id) => FATE_ICON[id]),
+        faces.map((id) => FATE_ICON[id]),
       );
     } catch {
       diceFailed = true; // no WebGL: the die flies the old way
@@ -1550,7 +1558,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
   }
   /** The silver d10 (a match of 4): it spins up to the foe and strikes for its roll. Damage only. */
   async function rollD10At(rune: Rune, tgt: Zone, x0: number, y0: number) {
-    const d = rollD10(rng);
+    const d = rollD10(rng, o.d10Damage);
     let [x1, y1] = foeXY(tgt);
     if (!WARDS) x1 = Math.max(60, Math.min(app.clientWidth - 60, x0 * 0.5 + app.clientWidth * 0.25));
     y1 += 12;
@@ -1592,7 +1600,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       });
       gsap.to(hint, { opacity: 0, duration: 0.2 });
       if (dead) return;
-      f = rollFate(rng, HEROES.length);
+      f = rollFate(rng, HEROES.length, faces);
       await stage3d.throwHeld({ results: [f.roll], hang: ['short'] });
       if (dead) return;
       const p = stage3d.screenPoint(app, 0);
@@ -1604,7 +1612,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       stage3d.shrinkAway(reduce ? 0 : 0.4);
       delete diceHost.dataset.on;
     } else {
-      f = rollFate(rng, HEROES.length);
+      f = rollFate(rng, HEROES.length, faces);
       let [x1, y1] = foeXY(tgt);
       if (!WARDS) x1 = Math.max(60, Math.min(app.clientWidth - 60, x0 * 0.5 + app.clientWidth * 0.25));
       y1 += 12;

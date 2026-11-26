@@ -16,10 +16,10 @@ export const D10 = {
   crit: 2,
 };
 
-/** The d10's roll and its damage. */
-export function rollD10(rng: Rng): { roll: number; dmg: number } {
+/** The d10's roll and its damage (`mult` per pip, default D10.mult). */
+export function rollD10(rng: Rng, mult: number = D10.mult): { roll: number; dmg: number } {
   const roll = 1 + pick(rng, 10);
-  return { roll, dmg: roll * D10.mult * (roll === 10 ? D10.crit : 1) };
+  return { roll, dmg: roll * mult * (roll === 10 ? D10.crit : 1) };
 }
 
 export type FateId = 'bladeStorm' | 'heroSurge' | 'tempest';
@@ -42,11 +42,16 @@ export const FATES: Record<FateId, Fate> = {
   tempest: { id: 'tempest', name: 'Tempest', text: `${FATE.tempestRunes} runes charge with lightning and go off` },
 };
 
-/** The fate on each face, 1 to 20: seven, seven and six faces. */
-export const FACES: FateId[] = Array.from({ length: 20 }, (_, i) => (['bladeStorm', 'heroSurge', 'tempest'] as const)[i % 3]);
+export const FATE_IDS: FateId[] = ['bladeStorm', 'heroSurge', 'tempest'];
 
-/** The fate on a face (1-20). */
-export const faceFate = (n: number): Fate => FATES[FACES[n - 1]];
+/** The fate on each face, 1 to 20, the given fates taking turns (all three: seven, seven and six faces). */
+export function facesFor(fates: readonly FateId[] = FATE_IDS): FateId[] {
+  const use = fates.length ? fates : FATE_IDS;
+  return Array.from({ length: 20 }, (_, i) => use[i % use.length]);
+}
+
+/** The faces with all three fates. */
+export const FACES: FateId[] = facesFor();
 
 export interface FateRoll {
   /** The face that came up. */
@@ -56,10 +61,10 @@ export interface FateRoll {
   hero: number;
 }
 
-/** Throws the gold d20 and reads its fate. All before anything moves. */
-export function rollFate(rng: Rng, party = 4): FateRoll {
+/** Throws the gold d20 (these faces) and reads its fate. All before anything moves. */
+export function rollFate(rng: Rng, party = 4, faces: readonly FateId[] = FACES): FateRoll {
   const roll = 1 + pick(rng, 20);
-  return { roll, fate: faceFate(roll), hero: pick(rng, party) };
+  return { roll, fate: FATES[faces[roll - 1]], hero: pick(rng, party) };
 }
 
 /* ---------- lightning runes ---------- */
@@ -93,8 +98,8 @@ export function crossCells(r: number, c: number): number[] {
 }
 
 /** A new rune's charge, if any, given how many charged runes are on the board already. */
-export function spawnCharge(rng: Rng, onBoard: number): Charge | null {
+export function spawnCharge(rng: Rng, onBoard: number, chance: number = LIGHTNING.chance): Charge | null {
   if (onBoard >= LIGHTNING.max) return null;
-  if (rng() >= LIGHTNING.chance) return null;
+  if (rng() >= chance) return null;
   return rng() < 0.5 ? 'bolt' : 'storm';
 }
