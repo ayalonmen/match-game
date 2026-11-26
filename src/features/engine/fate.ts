@@ -2,153 +2,64 @@ import { pick, type Rng } from './rng';
 import { COLS, ROWS, key } from './board';
 
 /*
-  The thrown die (2026-11-25, Ayalon: "have it with random effects"). A match of 4 forges a die, 5 a golden one that
-  rolls twice and keeps the best. Thrown, its number picks a band and the band a random fate. Both are decided from
-  the seeded RNG before the die leaves the hand.
+  The dice (2026-11-26, Ayalon: "change the dice we roll to d10 and have it only with DMG ... the d20 should still
+  have effects but lets have 3 effects for now that are more impactful").
+  - A match of 4 forges a silver d10: tapped, it rolls 1-10 and strikes for that many times D10.mult (a 10 doubles).
+  - A match of 5 forges the gold d20: thrown in 3D, every face carries one of three big fates, shown as its icon.
+  Both are decided from the seeded RNG before anything moves.
 */
 
-export type FateBand = 'backfire' | 'minor' | 'major' | 'epic' | 'legend';
+export const D10 = {
+  /** Damage per pip. */
+  mult: 8,
+  /** A 10 strikes this many times harder. */
+  crit: 2,
+};
 
-export type FateId =
-  | 'cracked'
-  | 'spark'
-  | 'mend'
-  | 'bulwark'
-  | 'kindle'
-  | 'rally'
-  | 'chain'
-  | 'firestorm'
-  | 'transmute'
-  | 'secondWind'
-  | 'stagger'
-  | 'meteor'
-  | 'lance'
-  | 'timeStop'
-  | 'stormCall'
-  | 'cataclysm';
+/** The d10's roll and its damage. */
+export function rollD10(rng: Rng): { roll: number; dmg: number } {
+  const roll = 1 + pick(rng, 10);
+  return { roll, dmg: roll * D10.mult * (roll === 10 ? D10.crit : 1) };
+}
+
+export type FateId = 'bladeStorm' | 'heroSurge' | 'tempest';
 
 export interface Fate {
   id: FateId;
-  band: FateBand;
   name: string;
   /** What it does, for the banner. */
   text: string;
 }
 
-const F = (id: FateId, band: FateBand, name: string, text: string): Fate => ({ id, band, name, text });
-
-/** Every fate by band. The numbers live in FATE below. */
-export const FATES: Record<FateBand, Fate[]> = {
-  backfire: [
-    F('cracked', 'backfire', 'Cracked Die', 'The party takes 8 and two runes turn to skulls'),
-  ],
-  minor: [
-    F('spark', 'minor', 'Spark', 'A strike of 30'),
-    F('mend', 'minor', 'Mend', 'The party heals 15'),
-    F('bulwark', 'minor', 'Bulwark', '+10 armor'),
-    F('kindle', 'minor', 'Kindle', '2 burn on the foe'),
-    F('rally', 'minor', 'Rally', '+20% charge to the whole party'),
-  ],
-  major: [
-    F('chain', 'major', 'Chain Lightning', 'Lightning strikes five runes on the board'),
-    F('firestorm', 'major', 'Firestorm', '4 burn and a strike of 25'),
-    F('transmute', 'major', 'Transmute', 'Six runes become the die’s rune'),
-    F('secondWind', 'major', 'Second Wind', 'The party heals 35'),
-    F('stagger', 'major', 'Stagger', 'The foe loses a turn, and a strike of 30'),
-  ],
-  epic: [
-    F('meteor', 'epic', 'Meteor', 'A 3×3 blast on the board and 60 damage'),
-    F('lance', 'epic', 'Lightning Lance', 'A row and a column clear, and 50 damage'),
-    F('timeStop', 'epic', 'Time Stop', 'Every foe waits two more turns, and 40 damage'),
-    F('stormCall', 'epic', 'Storm Call', 'Three runes become lightning runes, and 40 damage'),
-  ],
-  legend: [F('cataclysm', 'legend', 'Cataclysm', 'Every rune of the commonest kind breaks, and 150 damage')],
-};
-
-/** The numbers of the fates. */
 export const FATE = {
-  crackedHurt: 8,
-  crackedSkulls: 2,
-  spark: 30,
-  mend: 15,
-  bulwark: 10,
-  kindle: 2,
-  rally: 20,
-  chainRunes: 5,
-  firestormBurn: 4,
-  firestormHit: 25,
-  transmuteRunes: 6,
-  secondWind: 35,
-  stagger: 30,
-  meteor: 60,
-  lance: 50,
-  timeStopTurns: 2,
-  timeStop: 40,
-  stormCallRunes: 3,
-  stormCall: 40,
-  cataclysm: 150,
+  /** Runes the tempest charges and sets off. */
+  tempestRunes: 4,
 };
 
-const BY_ID = Object.fromEntries(Object.values(FATES).flat().map((f) => [f.id, f])) as Record<FateId, Fate>;
+export const FATES: Record<FateId, Fate> = {
+  bladeStorm: { id: 'bladeStorm', name: 'Blade Storm', text: 'Every rune on the board turns to blades' },
+  heroSurge: { id: 'heroSurge', name: 'Hero Surge', text: 'A random hero unleashes their power' },
+  tempest: { id: 'tempest', name: 'Tempest', text: `${FATE.tempestRunes} runes charge with lightning and go off` },
+};
 
-/**
- * The fate on each face, 1 to 20, weakest to strongest: 1 backfires (5%), 2-9 minor (40%), 10-15 major (30%),
- * 16-19 epic (20%), 20 the Cataclysm (5%).
- */
-export const FACES: FateId[] = [
-  'cracked',
-  'kindle',
-  'bulwark',
-  'mend',
-  'rally',
-  'spark',
-  'bulwark',
-  'mend',
-  'spark',
-  'chain',
-  'stagger',
-  'transmute',
-  'secondWind',
-  'firestorm',
-  'chain',
-  'stormCall',
-  'timeStop',
-  'lance',
-  'meteor',
-  'cataclysm',
-];
+/** The fate on each face, 1 to 20: seven, seven and six faces. */
+export const FACES: FateId[] = Array.from({ length: 20 }, (_, i) => (['bladeStorm', 'heroSurge', 'tempest'] as const)[i % 3]);
 
 /** The fate on a face (1-20). */
-export const faceFate = (n: number): Fate => BY_ID[FACES[n - 1]];
-
-/** The band of a face. */
-export const fateBand = (n: number): FateBand => faceFate(n).band;
+export const faceFate = (n: number): Fate => FATES[FACES[n - 1]];
 
 export interface FateRoll {
-  /** The face of the first die, and of the second for a golden die. */
-  a: number;
-  b: number | null;
-  /** The face that counts. */
+  /** The face that came up. */
   roll: number;
   fate: Fate;
-  /** A cell on the board for a fate that aims somewhere (meteor, lance), else -1. */
-  at: number;
+  /** For Hero Surge: which hero (an index into the party), decided with the roll. */
+  hero: number;
 }
 
-/** Throws the die (golden: twice, keep the higher face) and reads its fate. All before anything moves. */
-export function rollFate(rng: Rng, golden: boolean): FateRoll {
-  const a = 1 + pick(rng, 20);
-  const b = golden ? 1 + pick(rng, 20) : null;
-  const roll = b == null ? a : Math.max(a, b);
-  const fate = faceFate(roll);
-  // meteors land away from the edges so the whole 3x3 is on the board
-  const at =
-    fate.id === 'meteor'
-      ? key(1 + pick(rng, ROWS - 2), 1 + pick(rng, COLS - 2))
-      : fate.id === 'lance'
-        ? key(pick(rng, ROWS), pick(rng, COLS))
-        : -1;
-  return { a, b, roll, fate, at };
+/** Throws the gold d20 and reads its fate. All before anything moves. */
+export function rollFate(rng: Rng, party = 4): FateRoll {
+  const roll = 1 + pick(rng, 20);
+  return { roll, fate: faceFate(roll), hero: pick(rng, party) };
 }
 
 /* ---------- lightning runes ---------- */

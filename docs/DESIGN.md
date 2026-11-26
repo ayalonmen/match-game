@@ -15,20 +15,16 @@ approved the prototype ("lock this"). The prototype is `docs/reference/ember-run
   - Garran, Shield Wall: +20 armor, every foe waits one more turn.
   - Mara, Fire Volley: 6 burning arrows of 14, the last one double.
   - Elin, Mending Herbs: heal 30, every skull becomes a vial.
-- Match 4 forges a d20 of that rune, match 5 (or an L / T of five) a golden one that rolls twice and keeps the best.
-  Tapping it brings up Playful Roll's 3D throw (`features/dice`, ported 2026-11-25: the die in the thumb zone,
-  flick or tap, bounces off the screen edges). Its faces carry fate icons instead of numbers (Ayalon 2026-11-25;
-  `battle/fate-icons.ts`, engraved through the DiceStage `icons` option). The face is decided from the seeded RNG
-  as the die leaves the hand (`engine/fate.ts`, `FACES`, `rollFate`); faces run weakest to strongest so the golden
-  die keeps the higher one:
-  - face 1, backfire (5%): Cracked Die (8 to the party, two skulls);
-  - 2-9, minor (40%): Spark (strike of 30), Mend (heal 15), Bulwark (+10 armor), Kindle (2 burn), Rally (+20% charge);
-  - 10-15, major (30%): Chain Lightning (five runes struck), Firestorm (4 burn, strike of 25), Transmute (six runes
-    become the die's rune), Second Wind (heal 35), Stagger (the foe loses a turn, strike of 30);
-  - 16-19, epic (20%): Storm Call (three lightning runes, 40), Time Stop (every foe waits two more turns, 40),
-    Lightning Lance (a row and a column, 50), Meteor (3×3 blast, 60);
-  - face 20 (5%): Cataclysm (every rune of the commonest kind breaks, 150).
-  Without WebGL the die flies up in 2D as before and the same fate plays.
+- Dice (2026-11-26, Ayalon: "change the dice we roll to d10 and have it only with DMG ... the d20 should still have
+  effects but lets have 3 effects for now that are more impactful"; `engine/fate.ts`):
+  - Match 4 forges a silver d10. Tap it and it spins up to the foe and strikes for roll × 8 (a 10 crits, ×2). No 3D
+    throw, no fate, a plain tile (no halo).
+  - Match 5 (or an L / T of five) forges the gold d20. Tap it and Playful Roll's 3D throw comes up (`features/dice`,
+    flick or tap). Its faces carry three fates as icons (seven, seven and six faces):
+    Blade Storm (every rune and skull on the board turns to blades, then they all match; its matches forge no die,
+    so it can't chain into another golden die), Hero Surge (a random hero's power, free, picked with the roll),
+    Tempest (four runes charge with lightning, one by one, then all go off).
+  Without WebGL the gold die flies up in 2D and the same fate plays.
 - Die art (2026-11-26, Ayalon's images): on the board a silver die for a match of 4 and a gold d20 for the golden
   die (`assets/ui/die-silver.webp`, `die-gold.webp`); the 3D die matches the gold one (amber faces with veins,
   thick gold edges). The next move shows in Ayalon's frame (`intent-frame.webp`): turns left in the crimson seal,

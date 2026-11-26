@@ -18,15 +18,14 @@ import {
   pickRune,
   rc,
   rollFate,
+  rollD10,
   FACES,
   blastCells,
-  crossCells,
   spawnCharge,
   FATE,
   type BattleTier,
   type CellType,
   type Charge,
-  type FateBand,
   type FateRoll,
   type FoeRules,
   type Group,
@@ -244,13 +243,6 @@ const COL: Record<Rune | 'skull', string[]> = {
   vial: ['rgba(110,230,120,1)', 'rgba(200,255,160,1)', 'rgba(60,200,90,1)'],
   skull: ['rgba(170,90,255,1)', 'rgba(120,60,200,1)', 'rgba(220,170,255,1)'],
 };
-const BAND: Record<FateBand, string> = {
-  backfire: 'Backfire',
-  minor: 'Minor fate',
-  major: 'Major fate',
-  epic: 'Epic fate',
-  legend: 'Legendary',
-};
 // a small lightning mark on a charged rune: a bolt between two arrows (column) or a bolt in a ring (area)
 const CHARGE_BADGE: Record<Charge, string> = {
   bolt: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1l-3 4h2v3l-3 5h3l-2 6 6-8h-3l2-4h-2V5h2z" fill="#fff"/><path d="M12 23l-3-3h6z" fill="#cfefff"/></svg>',
@@ -462,7 +454,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
   /* ---------- board ---------- */
   function dieHTML(t: Die, rune: Rune, size: number) {
     // Ayalon's die art (2026-11-26): silver for a match of 4, gold for the golden die of a match of 5
-    return `<div class="er-die ${t === 'd20a' ? 'er-adv' : ''}" style="--s:${size}"><img class="er-die-img" src="${t === 'd20a' ? dieGoldImg : dieSilverImg}" alt=""><span class="er-dn"></span></div><img class="er-dr" src="${IMG[rune]}" alt="">`;
+    return `<div class="er-die ${t === 'd20a' ? 'er-adv' : ''}" style="--s:${size}"><img class="er-die-img" src="${t === 'd20a' ? dieGoldImg : dieSilverImg}" alt=""><span class="er-dn">${t === 'd20a' ? '' : '10'}</span></div><img class="er-dr" src="${IMG[rune]}" alt="">`;
   }
   function makeTile(t: CellType, r: number, c: number, rune: Rune = 'ruby', charge?: Charge): Tile {
     const el = document.createElement('div');
@@ -470,9 +462,8 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     el.style.width = el.style.height = s + 'px';
     if (isDie(t))
       el.innerHTML =
-        (t === 'd20a' ? '<div class="er-rays"></div>' : '') +
-        '<div class="er-halo"></div>' +
-        dieHTML(t, rune, s);
+        // the silver d10 stays plain (Ayalon: "more simpler"); the gold d20 keeps its rays and halo
+        (t === 'd20a' ? '<div class="er-rays"></div><div class="er-halo"></div>' : '') + dieHTML(t, rune, s);
     else
       el.innerHTML =
         (charge ? '<span class="er-zap"></span>' : '') +
@@ -1106,7 +1097,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
         spawns: Spawn[] = [];
       for (const g of groups) {
         g.cells.forEach((k) => clear.add(k));
-        if (g.maxRun >= 4 || g.cells.length >= 5) {
+        if (!noForge && (g.maxRun >= 4 || g.cells.length >= 5)) {
           const at = origin != null && g.cells.includes(origin) ? origin : g.longest[Math.floor(g.longest.length / 2)];
           spawns.push([at, g.maxRun >= 5 || g.cells.length >= 5 ? 'd20a' : 'd20', g.t]);
         }
@@ -1307,7 +1298,16 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     gsap.set(el, { x, y, xPercent: -50, yPercent: -50 });
     return el;
   }
-  async function flyDie(el: HTMLElement, rune: Rune, x0: number, y0: number, x1: number, y1: number, i: number) {
+  async function flyDie(
+    el: HTMLElement,
+    rune: Rune,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    i: number,
+    sides = 20,
+  ) {
     const cx = (x0 + x1) / 2 + (i ? 30 : -30),
       cy = Math.min(y0, y1) - 130 - i * 20,
       prog = { t: 0 },
@@ -1331,7 +1331,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
         const now = performance.now();
         if (now - last > 55) {
           last = now;
-          dn.textContent = String(1 + rnd(20));
+          dn.textContent = String(1 + rnd(sides));
           tone(600 + rnd(400), 0.02, 'square', 0.02);
         }
         emit({
@@ -1387,13 +1387,6 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
         sparks(x, py, 7);
       }, r * 25);
     }
-  }
-  /** The lance's row: a sideways bolt across the board. */
-  function rowBolt(r: number) {
-    const [x0, y] = cellXY(r, 0),
-      [x1] = cellXY(r, COLS - 1);
-    wash(x0 - s / 2, y - s / 2, x1 - x0 + s, s);
-    bolt(x0 - s * 0.8, y, x1 + s * 0.8, y, { w: 4.5, jag: 0.07, forks: 3 });
   }
   /** The storm: arcs crackle out from the rune to every cell around it, with a shockwave. */
   function storm(r: number, c: number) {
@@ -1452,23 +1445,12 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     for (let i = 0; i < n && pool.length; i++) out.push(pool.splice(rand(pool.length), 1)[0]);
     return out;
   }
-  function curse(n: number) {
-    for (const k of randomRunes(n)) {
-      const [r, c] = rc(k);
-      tile(r, c).el.remove();
-      grid[r][c] = makeTile('skull', r, c);
-      gsap.from(tile(r, c).el, { scale: 1.6, opacity: 0, duration: 0.3 });
-    }
-  }
-  function heal(n: number) {
-    S.hp = Math.min(S.maxHp, S.hp + n);
-    const [x, y] = appXY(heroBar);
-    float('+' + n, 'heal', x, y - 16);
-  }
 
   /* ---------- the thrown die (2026-11-25): Playful Roll's 3D throw, and a random fate ---------- */
   let dice: DiceStage | null = null,
-    diceFailed = false;
+    diceFailed = false,
+    /** Set while a Blade Storm's matches resolve, so the storm can't forge the next golden die. */
+    noForge = false;
   const diceHost = $('.er-dice');
   function diceStage() {
     if (dice || diceFailed) return dice;
@@ -1485,111 +1467,58 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     }
     return dice;
   }
-  async function applyFate(f: FateRoll, rune: Rune, tgt: Zone, at: [number, number]) {
-    const foe = liveFoe(tgt);
+  async function applyFate(f: FateRoll, at: [number, number]) {
     switch (f.fate.id) {
-      case 'cracked':
-        hurt(FATE.crackedHurt);
-        curse(FATE.crackedSkulls);
-        break;
-      case 'spark':
-        slash(at[0], at[1], ...foeXY(tgt), 30, 0.3, 1, 'rgba(190,230,255,0.5)');
-        hit(tgt, FATE.spark);
-        break;
-      case 'mend':
-        heal(FATE.mend);
-        break;
-      case 'bulwark':
-        S.armor = Math.min(N.armorCap + N.wallArmor, S.armor + FATE.bulwark);
-        break;
-      case 'kindle':
-        if (foe.alive) foe.burn += FATE.kindle;
-        embersOn(tgt, 16);
-        break;
-      case 'rally':
-        HEROES.forEach((h) => (S.charge[h.id] = Math.min(100, S.charge[h.id] + FATE.rally)));
-        break;
-      case 'chain': {
-        const cells = randomRunes(FATE.chainRunes);
-        let [px, py] = at;
-        for (const k of cells) {
-          const [x, y] = cellXY(...rc(k));
-          bolt(px, py, x, y, { w: 3.5, jag: 0.18, forks: 1, decay: 0.045 });
-          [px, py] = [x, y];
-        }
-        tone(1600, 0.3, 'sawtooth', 0.06, 0.3);
-        await wait(250);
-        await clearCells(cells, 1);
+      case 'bladeStorm': {
+        // every rune and skull on the board turns to blades, one wave down the board, then they all match
+        tone(160, 0.6, 'sawtooth', 0.07, 4);
+        for (let r = 0; r < ROWS; r++)
+          for (let c = 0; c < COLS; c++) {
+            const old = grid[r][c];
+            if (!old || isDie(old.type) || old.type === 'blade') continue;
+            old.el.remove();
+            grid[r][c] = makeTile('blade', r, c, 'ruby', old.charge);
+            const el = tile(r, c).el;
+            gsap.from(el, { scale: 0, rotation: -180, duration: 0.35, delay: r * 0.06 + c * 0.02, ease: 'back.out(2)' });
+            const [x, y] = cellXY(r, c);
+            later(() => sparks(x, y, 4), (r * 0.06 + c * 0.02) * 1000);
+          }
+        await wait(ROWS * 60 + 400);
+        noForge = true;
         break;
       }
-      case 'firestorm':
-        if (foe.alive) foe.burn += FATE.firestormBurn;
-        embersOn(tgt, 30);
-        hit(tgt, FATE.firestormHit);
-        break;
-      case 'transmute':
-        for (const k of randomRunes(FATE.transmuteRunes, rune)) {
-          const [r, c] = rc(k),
-            old = tile(r, c);
-          old.el.remove();
-          grid[r][c] = makeTile(rune, r, c, 'ruby', old.charge);
-          gsap.from(tile(r, c).el, { scale: 0, rotation: 180, duration: 0.35 });
-        }
-        await wait(350);
-        break;
-      case 'secondWind':
-        heal(FATE.secondWind);
-        break;
-      case 'stagger':
-        for (const k of ZONES) if (S.foes[k].alive) S.foes[k].cd += 1;
-        hit(tgt, FATE.stagger);
-        break;
-      case 'meteor': {
-        const [r, c] = rc(f.at),
-          [x, y] = cellXY(r, c);
-        hit(tgt, FATE.meteor, 'crit');
-        burst(x, y, true);
-        ring(x, y, 'rgba(255,170,90,1)', 5, 14);
-        await clearCells(blastCells('storm', r, c), 1);
-        break;
-      }
-      case 'lance': {
-        const [r, c] = rc(f.at),
-          [x, y] = cellXY(r, c);
-        hit(tgt, FATE.lance, 'crit');
-        beam(c, r);
-        rowBolt(r);
-        crack();
-        sparks(x, y, 20);
-        await wait(200);
-        await clearCells(crossCells(r, c), 1);
-        break;
-      }
-      case 'timeStop':
-        for (const k of ZONES) if (S.foes[k].alive) S.foes[k].cd += FATE.timeStopTurns;
-        sweep('rgba(150,200,255,0.5)');
-        hit(tgt, FATE.timeStop);
-        break;
-      case 'stormCall': {
-        hit(tgt, FATE.stormCall);
-        const plain = randomRunes(30).filter((k) => !grid[rc(k)[0]][rc(k)[1]]?.charge);
-        plain.slice(0, FATE.stormCallRunes).forEach((k, i) => charge(...rc(k), i % 2 ? 'storm' : 'bolt'));
-        await wait(350);
-        break;
-      }
-      case 'cataclysm': {
-        hit(tgt, FATE.cataclysm, 'crit');
+      case 'heroSurge': {
+        // a random hero (decided with the roll) unleashes their power, for free
+        const h = HEROES[f.hero % HEROES.length];
         burst(at[0], at[1], true);
-        gsap.fromTo(bossFlash, { opacity: 1 }, { opacity: 0, duration: 0.5 });
-        if (!reduce) gsap.fromTo(app, { y: -12 }, { y: 0, duration: 0.5, ease: 'elastic.out(1,.25)' });
-        const counts: Partial<Record<Rune, number>> = {};
-        for (const row of grid)
-          for (const tl of row) if (tl && isRune(tl.type)) counts[tl.type] = (counts[tl.type] ?? 0) + 1;
-        const most = (Object.keys(counts) as Rune[]).sort((x, y) => counts[y]! - counts[x]!)[0];
-        const cells: number[] = [];
-        for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (type(r, c) === most) cells.push(key(r, c));
-        await wait(300);
-        await clearCells(cells, 1);
+        await wait(250);
+        await unleash(h.id);
+        break;
+      }
+      case 'tempest': {
+        // runes charge with lightning one by one, then the whole storm goes off together
+        const cells = randomRunes(FATE.tempestRunes),
+          blasts: [number, Charge][] = [];
+        for (const k of cells) {
+          const [r, c] = rc(k),
+            ch: Charge = rand(2) ? 'bolt' : 'storm';
+          const [x, y] = cellXY(r, c);
+          bolt(at[0], at[1], x, y, { w: 3.5, jag: 0.16, forks: 1, decay: 0.05 });
+          crack();
+          charge(r, c, ch);
+          blasts.push([k, ch]);
+          await wait(160);
+        }
+        await wait(350);
+        const hit = new Set<number>();
+        for (const [k, ch] of blasts) blastCells(ch, ...rc(k)).forEach((x) => hit.add(x));
+        // the bolts are spent as they go off
+        for (const [k] of blasts) {
+          const [r, c] = rc(k),
+            t = tile(r, c);
+          if (t) t.charge = undefined;
+        }
+        await lightning(blasts, [...hit], 1);
         break;
       }
     }
@@ -1603,48 +1532,79 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     hideHint();
     const t = tile(r, c),
       dieType = t.type as Die,
-      golden = dieType === 'd20a',
       rune = t.rune || 'ruby';
     let tgt: Zone = target || S.lock || zone(c);
     if (!S.foes[tgt].alive) tgt = 'vexa';
     const [x0, y0] = cellXY(r, c);
     gsap.to(t.el, { scale: 0, opacity: 0, duration: 0.2, onComplete: () => t.el.remove() });
     grid[r][c] = null;
+    if (dieType === 'd20') await rollD10At(rune, tgt, x0, y0);
+    else await throwD20(dieType, rune, tgt, x0, y0);
+    if (dead) return;
+    await wait(400);
+    await flushBanners();
+    await collapse();
+    if (!checkEnd()) await resolve(null);
+    noForge = false;
+    await afterMove(true);
+  }
+  /** The silver d10 (a match of 4): it spins up to the foe and strikes for its roll. Damage only. */
+  async function rollD10At(rune: Rune, tgt: Zone, x0: number, y0: number) {
+    const d = rollD10(rng);
+    let [x1, y1] = foeXY(tgt);
+    if (!WARDS) x1 = Math.max(60, Math.min(app.clientWidth - 60, x0 * 0.5 + app.clientWidth * 0.25));
+    y1 += 12;
+    const el = throwDieEl('d20', rune, x0, y0);
+    await flyDie(el, rune, x0, y0, x1, y1, 0, 10);
+    const dn = el.querySelector<HTMLElement>('.er-dn')!;
+    dn.textContent = String(d.roll);
+    gsap.fromTo(dn, { scale: 1.8 }, { scale: 1, duration: 0.3, ease: 'back.out(3)' });
+    const crit = d.roll === 10;
+    hit(tgt, d.dmg, crit ? 'crit' : undefined);
+    if (crit) {
+      burst(x1, y1, true);
+      gsap.fromTo(bossFlash, { opacity: 0.8 }, { opacity: 0, duration: 0.45 });
+      tone(660, 0.3, 'triangle', 0.12, 1.5);
+    } else {
+      sparks(x1, y1, 16);
+      tone(440, 0.15, 'triangle', 0.08, 1.2);
+    }
+    banner(`${d.roll}${crit ? ' · Critical' : ''}`, `d10 · ${d.dmg} damage`);
+    later(() => gsap.to(el, { opacity: 0, scale: 0.4, duration: 0.3, onComplete: () => el.remove() }), 900);
+    await wait(500);
+  }
+  /** The gold d20 (a match of 5): Playful Roll's 3D throw, and one of three big fates. */
+  async function throwD20(dieType: Die, rune: Rune, tgt: Zone, x0: number, y0: number) {
     const stage3d = diceStage();
     let f: FateRoll, at: [number, number];
     if (stage3d) {
       // the die comes into the hand over the dimmed board; it is decided the moment it leaves the hand
       diceHost.dataset.on = 'true';
       const hint = $('.er-throw-hint');
-      hint.textContent = golden ? 'Flick or tap the golden dice' : 'Flick or tap the die';
+      hint.textContent = 'Flick or tap the golden die';
       gsap.to(hint, { opacity: 1, duration: 0.25 });
       tone(240, 0.5, 'sawtooth', 0.05, 3);
-      const rel = await stage3d.aim({
-        count: golden ? 2 : 1,
+      await stage3d.aim({
+        count: 1,
         sigil: null,
         tableTop: bossbar.offsetTop + bossbar.offsetHeight,
         onGrab: () => void gsap.to(hint, { opacity: 0, duration: 0.2 }),
       });
       gsap.to(hint, { opacity: 0, duration: 0.2 });
       if (dead) return;
-      f = rollFate(rng, golden);
-      const results = golden ? [f.a, f.b!] : [f.a];
-      void rel;
-      await stage3d.throwHeld({ results, hang: results.map((n) => (n === 20 || n === 1 ? 'full' : 'short')) });
+      f = rollFate(rng, HEROES.length);
+      await stage3d.throwHeld({ results: [f.roll], hang: ['short'] });
       if (dead) return;
-      const kept = golden && f.b! > f.a ? 1 : 0;
-      stage3d.dimOthers(kept);
-      const p = stage3d.screenPoint(app, kept);
+      const p = stage3d.screenPoint(app, 0);
       at = [p.x, p.y];
-      const col = f.fate.band === 'backfire' ? 0xb3301a : f.fate.band === 'minor' ? 0xf2b44a : 0x9fd8ff;
-      stage3d.flash(col, f.fate.band === 'legend' || f.fate.band === 'epic' ? 0.5 : 0.3, 0.35, kept);
-      // the number is read on the die, then the die goes and the fate's name takes its place
+      stage3d.flash(0xffd27a, 0.45, 0.35, 0);
+      // the icon is read on the die, then the die goes and the fate's name takes its place
       await wait(700);
       if (dead) return;
       stage3d.shrinkAway(reduce ? 0 : 0.4);
       delete diceHost.dataset.on;
     } else {
-      f = rollFate(rng, golden);
+      f = rollFate(rng, HEROES.length);
       let [x1, y1] = foeXY(tgt);
       if (!WARDS) x1 = Math.max(60, Math.min(app.clientWidth - 60, x0 * 0.5 + app.clientWidth * 0.25));
       y1 += 12;
@@ -1654,26 +1614,12 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       later(() => gsap.to(el, { opacity: 0, scale: 0.4, duration: 0.3, onComplete: () => el.remove() }), 1400);
       at = [x1, y1];
     }
-    const band = f.fate.band;
-    if (band === 'legend') {
-      tone(660, 0.5, 'triangle', 0.15, 2);
-      tone(990, 0.6, 'triangle', 0.1, 1.5);
-    } else if (band === 'backfire') tone(200, 0.5, 'sawtooth', 0.1, 0.4);
-    else if (band === 'epic' || band === 'major') tone(660, 0.25, 'triangle', 0.1, 1.3);
-    else tone(440, 0.2, 'triangle', 0.08, 1.2);
-    banner(
-      `${fateIconSvg(f.fate.id, 'er-fate-icon')}${esc(f.fate.name)}`,
-      `${BAND[band]}${golden ? ' · the better of two' : ''} · ${esc(f.fate.text)}`,
-    );
-    if (band === 'backfire') sparks(at[0], at[1], 20);
-    else burst(at[0], at[1], band === 'epic' || band === 'legend');
-    await wait(500);
-    await applyFate(f, rune, tgt, at);
-    await wait(500);
-    await flushBanners();
-    await collapse();
-    if (!checkEnd()) await resolve(null);
-    await afterMove(true);
+    tone(660, 0.5, 'triangle', 0.15, 2);
+    tone(990, 0.6, 'triangle', 0.1, 1.5);
+    banner(`${fateIconSvg(f.fate.id, 'er-fate-icon')}${esc(f.fate.name)}`, esc(f.fate.text));
+    burst(at[0], at[1], true);
+    await wait(600);
+    await applyFate(f, at);
   }
   async function power(id: HeroId) {
     if (S.busy || S.over || S.charge[id] < 100) return;
@@ -1681,6 +1627,12 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     setSel(null);
     S.charge[id] = 0;
     render();
+    await unleash(id);
+    if (!checkEnd()) await resolve(null);
+    await afterMove(false);
+  }
+  /** A hero's power: the card lifts, the cut-in, then the power itself (charge and turn are the caller's). */
+  async function unleash(id: HeroId) {
     const h = HEROES.find((x) => x.id === id)!,
       card = $(`.er-hc[data-h=${id}]`);
     gsap.fromTo(card, { y: 0 }, { y: -14, duration: 0.18, yoyo: true, repeat: 1, ease: 'power2.out' });
@@ -1695,8 +1647,6 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     } else if (id === 'garran') await shieldWall(card);
     else if (id === 'mara') await fireVolley(card);
     else await mendingHerbs(card);
-    if (!checkEnd()) await resolve(null);
-    await afterMove(false);
   }
 
   /* ---------- cut-in ---------- */
@@ -2292,10 +2242,10 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     const [x, y] = cellXY(r, c),
       C = gold
         ? ['rgba(255,220,120,1)', 'rgba(255,255,220,1)', 'rgba(255,170,60,1)']
-        : ['rgba(255,70,90,1)', 'rgba(255,200,120,1)', 'rgba(220,30,60,1)'];
-    ring(x, y, C[1], gold ? 6 : 4, s * 0.3);
-    ring(x, y, C[0], gold ? 4 : 2.5, s * 0.15);
-    for (let i = 0; i < (gold ? 70 : 36); i++) {
+        : ['rgba(220,230,245,1)', 'rgba(255,255,255,1)', 'rgba(150,170,200,1)'];
+    ring(x, y, C[1], gold ? 6 : 3, s * 0.3);
+    if (gold) ring(x, y, C[0], 4, s * 0.15);
+    for (let i = 0; i < (gold ? 70 : 16); i++) {
       const a = Math.random() * 6.283,
         v = 2 + Math.random() * (gold ? 8 : 5);
       emit({
@@ -2318,7 +2268,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       if (!reduce) gsap.fromTo(app, { y: -6 }, { y: 0, duration: 0.45, ease: 'elastic.out(1,.3)' });
     }
     float(
-      gold ? 'Golden d20' : 'd20 forged',
+      gold ? 'Golden d20' : 'd10 forged',
       gold ? 'crit' : 'armor',
       Math.min(Math.max(x, 130), app.clientWidth - 130),
       y - s * 0.6,
@@ -2829,7 +2779,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
       <li><img src="${IMG.vial}" alt=""><span>Vials heal the party, shields give armor that blocks her hits.</span></li>
       <li><img class="er-face-mini" src="${esc(HEROES[2].face)}" alt=""><span>Each of the party charges from one rune: ${k} from blades, ${g} from shields, ${m} from embers, ${el} from vials. Rubies charge everyone. Tap a full portrait to use the power, for free.</span></li>
       <li><div class="er-mini er-mini-stone">ᛉ</div><span>${WARDS ? `Two wards guard ${E}: each one standing cuts her damage taken by 25%. The number on each foe is turns until it acts.` : alone}</span></li>
-      <li><div class="er-mini">20</div><span>Match 4 to forge a d20 of that rune, then tap it and flick the die. Each face carries a fate: one face backfires, most give a small or strong boon, four are epic (meteors, lightning lances, time stops) and one is the Cataclysm. Match 5 for a golden die that rolls twice and keeps the better face.</span></li>
+      <li><div class="er-mini">20</div><span>Match 4 to forge a silver d10: tap it and it strikes for its roll (a 10 crits). Match 5 for the golden d20: tap it, flick the die, and the face it lands on is your fate: Blade Storm (every rune turns to blades), Hero Surge (a random hero's power, free) or Tempest (lightning runes that all go off).</span></li>
       <li><div class="er-mini er-mini-zap">⚡</div><span>Some runes fall in glowing with lightning. Match one: a bolt clears its whole column, a storm the 3×3 around it.</span></li>
     </ul>
     <button class="er-btn er-go-btn">Fight</button></div>`;

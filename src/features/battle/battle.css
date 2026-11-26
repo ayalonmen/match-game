@@ -675,6 +675,15 @@
 .er-die .er-dn {
   position: relative;
 }
+/* the silver d10's number, engraved like the art's */
+.er-die:not(.er-adv) .er-dn {
+  color: #23272e;
+  font-size: calc(var(--s) * 0.3px);
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7),
+    0 -1px 0 rgba(0, 0, 0, 0.4);
+  transform: translateY(2%);
+}
 .er-tile .er-dr,
 .er-tdie .er-dr {
   position: absolute;

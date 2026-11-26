@@ -109,24 +109,19 @@ describe('rules', () => {
 });
 
 describe('thrown die and lightning runes', () => {
-  it('faces run weakest to strongest, every fate is on the die, and a golden die keeps the higher face', async () => {
-    const { fateBand, rollFate, FACES, FATES } = await import('./fate');
-    expect(FACES).toHaveLength(20);
-    const order = ['backfire', 'minor', 'major', 'epic', 'legend'];
-    const bands = FACES.map((_, i) => order.indexOf(fateBand(i + 1)));
-    expect(bands).toEqual([...bands].sort((a, b) => a - b));
-    expect(new Set(FACES)).toEqual(new Set(Object.values(FATES).flat().map((f) => f.id)));
+  it('the d10 strikes for its roll, a 10 doubles; the d20 carries three fates', async () => {
+    const { rollD10, rollFate, FACES, D10 } = await import('./fate');
     const rng = createRng(3);
     for (let i = 0; i < 200; i++) {
-      const f = rollFate(rng, true);
-      expect(f.roll).toBe(Math.max(f.a, f.b!));
-      expect(f.fate.band).toBe(fateBand(f.roll));
-      if (f.fate.id === 'meteor') {
-        const r = Math.floor(f.at / COLS),
-          c = f.at % COLS;
-        expect(r > 0 && r < ROWS - 1 && c > 0 && c < COLS - 1).toBe(true);
-      }
+      const d = rollD10(rng);
+      expect(d.roll).toBeGreaterThanOrEqual(1);
+      expect(d.roll).toBeLessThanOrEqual(10);
+      expect(d.dmg).toBe(d.roll * D10.mult * (d.roll === 10 ? D10.crit : 1));
+      const f = rollFate(rng);
+      expect(f.fate.id).toBe(FACES[f.roll - 1]);
+      expect(f.hero).toBeLessThan(4);
     }
+    expect(new Set(FACES).size).toBe(3);
   });
   it('a bolt clears its column, a storm the 3x3 around it (cut at the edges)', async () => {
     const { blastCells } = await import('./fate');
