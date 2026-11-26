@@ -1,9 +1,9 @@
-import { RuneBattle, type Difficulty, type FigureFraming } from '../index';
+import { RuneBattle, type Difficulty, type FigureFraming, type HeroId } from '../index';
 import eddaImg from './assets/edda.webp';
 import eddaHurtImg from './assets/edda-angry.webp';
 
 // The demo page: the solo fight (?wards for the Ash and Hex wards), ?difficulty=easy|normal|hard|brutal, ?seed=123, ?card for the enemy
-// card, ?dev for the test buttons, ?painting for Vexa's painting in place of the figure, ?framing=full|auto (default close).
+// card, ?dev for the test buttons, ?painting for Vexa's painting in place of the figure, ?framing=full|auto (default close), ?party=mara,elin for who fights beside Kael.
 const q = new URLSearchParams(location.search);
 const difficulty = (q.get('difficulty') ?? 'normal') as Difficulty;
 const seed = q.has('seed') ? Number(q.get('seed')) : undefined;
@@ -28,6 +28,7 @@ export function App() {
       tutorial={!q.has('card')}
       introCard={q.has('card')}
       devTools={q.has('dev')}
+      members={q.has('party') ? (q.get('party')!.split(',').filter(Boolean) as HeroId[]) : undefined}
       onEnd={(r) => console.info('[ember-runes] fight over', r)}
       handleRef={(h) => ((window as unknown as { __er: unknown }).__er = h?.debug)}
     />
