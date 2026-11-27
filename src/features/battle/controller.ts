@@ -94,6 +94,8 @@ export interface ControllerOptions {
   introSub: string;
   /** No sound (the host's own sound setting). */
   muted?: boolean;
+  /** A buzz on phones while the dice fly and land (the host's haptics, or navigator.vibrate). */
+  haptic: (pattern: number | number[]) => void;
   /** The silver d10's damage per pip (default D10.mult). */
   d10Damage?: number;
   /** The fates on the gold d20's faces (default all three). */
@@ -1481,7 +1483,10 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     try {
       dice = new DiceStage(
         diceHost,
-        synthSounds(() => (muted ? null : ac)),
+        synthSounds(
+          () => (muted ? null : ac),
+          (p) => o.haptic(p),
+        ),
         reduce,
         (x, y, n) => sparks(x, y, n),
         faces.map((id) => FATE_ICON[id]),
