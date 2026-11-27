@@ -1496,7 +1496,10 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     try {
       dice = new DiceStage(
         diceHost,
-        synthSounds(() => (muted ? null : ac), (p) => buzz(p, true)),
+        synthSounds(
+          () => (muted ? null : ac),
+          (p) => buzz(p, true),
+        ),
         reduce,
         (x, y, n) => sparks(x, y, n),
         faces.map((id) => FATE_ICON[id]),
