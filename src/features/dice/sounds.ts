@@ -9,8 +9,19 @@ export interface DiceSounds {
   buzz(pattern: number | number[]): void;
 }
 
+function vibrate(pattern: number | number[]) {
+  try {
+    navigator.vibrate?.(pattern);
+  } catch {
+    /* not on this device */
+  }
+}
+
 /** Synthesized dice sounds on the host's audio context (null while there is none, or when muted). */
-export function synthSounds(ctx: () => AudioContext | null): DiceSounds {
+export function synthSounds(
+  ctx: () => AudioContext | null,
+  haptic: (pattern: number | number[]) => void = vibrate,
+): DiceSounds {
   function noise(ac: AudioContext, dur: number) {
     const n = Math.floor(ac.sampleRate * dur),
       buf = ac.createBuffer(1, n, ac.sampleRate),
@@ -70,11 +81,7 @@ export function synthSounds(ctx: () => AudioContext | null): DiceSounds {
       tone(320 + Math.random() * 120, 0.05, 0.12 * volume, 'triangle', 0.7);
     },
     buzz(pattern) {
-      try {
-        navigator.vibrate?.(pattern);
-      } catch {
-        /* not on this device */
-      }
+      haptic(pattern);
     },
   };
 }

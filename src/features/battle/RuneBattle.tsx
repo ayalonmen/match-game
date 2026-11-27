@@ -54,6 +54,12 @@ export interface RuneBattleProps {
   devTools?: boolean;
   /** No sound (follow the host's own sound setting). */
   muted?: boolean;
+  /**
+   * A buzz on phones: hits, wounds, lightning, a hero's power, the end. Pass the host's own haptics (its on/off
+   * setting, an iPhone fallback); left out, the fight calls navigator.vibrate itself. A function that does nothing
+   * turns them off.
+   */
+  haptic?: (pattern: number | number[]) => void;
   /** When the fight ends, before the end card. */
   onEnd?: (r: BattleResult) => void;
   /** The end card's Continue button; without it the card offers Fight again. */
@@ -61,6 +67,14 @@ export interface RuneBattleProps {
   className?: string;
   /** For tests: the running fight. */
   handleRef?: (h: BattleHandle | null) => void;
+}
+
+function vibrate(pattern: number | number[]) {
+  try {
+    navigator.vibrate?.(pattern);
+  } catch {
+    /* not on this device */
+  }
 }
 
 const SEEN_KEY = 'ember-runes-tutorial-seen';
@@ -180,6 +194,7 @@ export function RuneBattle(props: RuneBattleProps) {
       allowRetry: !!s.allowRetry,
       mustWin: !!s.mustWin,
       hasContinue: s.hasContinue,
+      haptic: (p) => (cbs.current.haptic ?? vibrate)(p),
       onEnd: (r) => cbs.current.onEnd?.(r),
       onContinue: (r) => cbs.current.onContinue?.(r),
       onTutorialEnd: () => {
