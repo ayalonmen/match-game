@@ -54,8 +54,7 @@ Ayalon's Water Hag layout (`docs/reference/design/water-hag-layout.png`) with hi
   top: her health in Ember Wheels' ornate frame (the textured red fill is clipped, not squeezed), then the countdown
   seal, her next move and the Warded / Enraged / Burning chips. The test buttons show only with devTools; sound
   follows the host's `muted`.
-- Haptics (2026-11-27): a buzz on a hit (stronger on a crit), a wound, a broken ward, lightning, a hero's power, a
-  swap that doesn't match, the dice landing, and the end (win / loss). Hits that come close together fold into one.
+- Haptics (2026-11-27): only the dice buzz, as they fly and land (Ayalon wanted the feel of the throw, nothing else).
   The host passes its own `haptic` (its on/off setting, the iPhone fallback); left out, `navigator.vibrate`.
 - The board sits in the gold board frame; its 7x6 cells line up with the tiles (`layout()` places the frame from the
   art's measured grid).

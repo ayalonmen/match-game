@@ -94,7 +94,7 @@ export interface ControllerOptions {
   introSub: string;
   /** No sound (the host's own sound setting). */
   muted?: boolean;
-  /** A buzz on phones (the host's haptics, or navigator.vibrate). */
+  /** A buzz on phones while the dice fly and land (the host's haptics, or navigator.vibrate). */
   haptic: (pattern: number | number[]) => void;
   /** The silver d10's damage per pip (default D10.mult). */
   d10Damage?: number;
@@ -430,14 +430,6 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     osc.connect(g).connect(ac.destination);
     osc.start(t);
     osc.stop(t + d);
-  }
-  /** A buzz; quick repeats (a combo's hits) fold into one so the phone doesn't rattle. */
-  let lastBuzz = 0;
-  function buzz(pattern: number | number[], force = false) {
-    const now = performance.now();
-    if (!force && now - lastBuzz < 90) return;
-    lastBuzz = now;
-    o.haptic(pattern);
   }
   function thud(v = 0.25) {
     if (muted || !ac) return;
@@ -778,7 +770,6 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     } else gsap.fromTo(tgt, { x: -5 }, { x: 0, duration: 0.25, ease: 'elastic.out(1,.3)' });
     if (k === 'vexa' && !FIG) gsap.fromTo(bossFlash, { opacity: 0.55 }, { opacity: 0, duration: 0.3 });
     thud(cls === 'crit' ? 0.4 : 0.18);
-    buzz(cls === 'crit' ? 28 : 10);
     if (f.hp <= 0 && k !== 'vexa') breakWard(k);
     if (k === 'vexa' && !f.enraged && f.hp > 0 && f.hp <= f.max / 2) {
       f.enraged = true;
@@ -798,7 +789,6 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     pods[k].classList.add('er-broken');
     S.queue.push([esc(f.name) + ' shattered', `${E} is exposed · her next attack is delayed`]);
     tone(880, 0.4, 'sawtooth', 0.08, 0.3);
-    buzz([20, 40, 45], true);
   }
   async function flushBanners() {
     while (S.queue.length) {
@@ -1277,7 +1267,6 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     gsap.fromTo(redFlash, { opacity: real ? 1 : 0.3 }, { opacity: 0, duration: 0.5 });
     if (!reduce) gsap.fromTo(app, { x: -8 }, { x: 0, duration: 0.4, ease: 'elastic.out(1,.25)' });
     thud(0.35);
-    buzz(real ? [45, 35, 30] : 15, true);
     render();
   }
 
@@ -1304,7 +1293,6 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     if (!findGroups().length) {
       swapData(a, b);
       tone(140, 0.12, 'square', 0.05);
-      buzz([8, 50, 8]);
       await Promise.all([
         tw(A.el, { x: c1 * s, y: r1 * s, duration: 0.16 }),
         tw(B.el, { x: c2 * s, y: r2 * s, duration: 0.16 }),
@@ -1397,7 +1385,6 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
   /** Blasts from lightning runes: a beam down a column, a burst over a 3x3; every rune caught strikes. */
   async function lightning(blasts: [number, Charge][], cells: number[], m: number) {
     crack();
-    buzz([30, 30, 50], true);
     for (const [k, ch] of blasts) {
       const [r, c] = rc(k);
       if (ch === 'bolt') beam(c, r);
@@ -1498,7 +1485,7 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
         diceHost,
         synthSounds(
           () => (muted ? null : ac),
-          (p) => buzz(p, true),
+          (p) => o.haptic(p),
         ),
         reduce,
         (x, y, n) => sparks(x, y, n),
@@ -1684,7 +1671,6 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
     const h = HEROES.find((x) => x.id === id)!,
       card = $(`.er-hc[data-h=${id}]`);
     gsap.fromTo(card, { y: 0 }, { y: -14, duration: 0.18, yoyo: true, repeat: 1, ease: 'power2.out' });
-    buzz([15, 40, 35], true);
     await cutIn(h);
     if (id === 'kael') {
       const cells: number[] = [];
@@ -2787,7 +2773,6 @@ export function mountBattle(root: HTMLElement, o: ControllerOptions): BattleHand
   function endCard(won: boolean) {
     const res = result(won);
     o.onEnd(res);
-    buzz(won ? [30, 60, 30, 60, 90] : [90, 60, 140], true);
     const tier = won ? (res.tier === 'critSuccess' ? 'Flawless victory' : 'Victory') : 'Defeat';
     if (won) {
       gsap.to(boss, { opacity: 0.25, filter: 'grayscale(1)', duration: 1 });
